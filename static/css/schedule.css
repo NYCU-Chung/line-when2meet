@@ -246,11 +246,12 @@ body {
   filter: brightness(0.85);
 }
 
-.slot-cell.status-0 { background: #E8F5E9; }   /* 有空 - 淡綠 */
+.slot-cell.status-0 { background: #E8F5E9; }   /* 有空 - 淡綠（通常不需要選取） */
 .slot-cell.status-1 { background: #E3F2FD; }   /* 上課 - 淡藍 */
 .slot-cell.status-2 { background: #FFEBEE; }   /* 忙碌 - 淡紅 */
+.slot-cell.status-4 { background: #FFF8E1; }   /* 睡覺 - 淡黃 */
 .slot-cell.status-3 { background: #F5F5F5; }   /* 其他 - 淡灰 */
-.slot-cell.status-empty { background: #FAFAFA; } /* 未填 */
+.slot-cell.status-empty { background: #FAFAFA; } /* 有空（預設空白） */
 
 .slot-icon {
   font-size: 18px;
@@ -338,7 +339,7 @@ body {
 
 .status-options {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   margin-bottom: 16px;
 }
@@ -354,10 +355,10 @@ body {
 }
 
 .status-option.selected { border-color: #4CAF50; background: #E8F5E9; }
-.status-option[data-status="empty"].selected { border-color: #999; background: #FAFAFA; }
 .status-option[data-status="0"].selected { border-color: #4CAF50; background: #E8F5E9; }
 .status-option[data-status="1"].selected { border-color: #2196F3; background: #E3F2FD; }
 .status-option[data-status="2"].selected { border-color: #F44336; background: #FFEBEE; }
+.status-option[data-status="4"].selected { border-color: #FFB300; background: #FFF8E1; }
 .status-option[data-status="3"].selected { border-color: #9E9E9E; background: #F5F5F5; }
 
 .note-label {
@@ -379,6 +380,7 @@ body {
 }
 
 .note-input:focus { border-color: #4CAF50; }
+.note-input:disabled { background: #fafafa; color: #aaa; }
 
 .modal-actions {
   display: flex;
@@ -435,7 +437,8 @@ body {
 .bg-class { background: #2196F3; }
 .bg-busy  { background: #F44336; }
 .bg-other { background: #9E9E9E; }
-.bg-empty { background: #e0e0e0; }
+.bg-sleep { background: #FFB300; }
+.bg-empty { background: #FAFAFA; border: 1px solid #e0e0e0; }
 
 /* ── Loading ── */
 .loading {

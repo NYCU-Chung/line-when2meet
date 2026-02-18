@@ -7,11 +7,12 @@
  * - 0~3：明確選取，全部都會儲存（包含 0=有空）
  */
 
+// 預設「有空」不儲存、不顯示 icon；只儲存 1~4（非空閒狀態）
 const STATUS_CONFIG = {
-  0: { label: "有空", icon: "✅", cls: "status-0" },
   1: { label: "上課", icon: "📚", cls: "status-1" },
   2: { label: "忙碌", icon: "🔴", cls: "status-2" },
   3: { label: "其他", icon: "⚪", cls: "status-3" },
+  4: { label: "睡覺", icon: "😴", cls: "status-4" },
 };
 
 // 伺服器回傳的 {day-slot: {status, note}}（只包含已選取的格子）
@@ -25,8 +26,8 @@ let currentDayIndex = 0;
 let dirty = false;
 let saving = false;
 
-// 筆刷狀態：null 代表清除/未選取
-let brushStatus = 0;
+// 筆刷狀態：0 代表清除（回到預設有空）
+let brushStatus = 1;
 
 function keyOf(day, slot) {
   return `${day}-${slot}`;
@@ -38,7 +39,7 @@ function getEntry(day, slot) {
 
 function setEntry(day, slot, statusOrNull, note) {
   const key = keyOf(day, slot);
-  if (statusOrNull === null || statusOrNull === undefined) {
+  if (statusOrNull === null || statusOrNull === undefined || Number(statusOrNull) === 0) {
     delete localData[key];
     return;
   }
@@ -194,13 +195,19 @@ function createSlotRow(day, slot, entryOrNull) {
     applyCellVisual(cell, entryOrNull.status, entryOrNull.note || "");
   }
 
+  // Tap to edit note/status. Drag painting will set suppressClickUntil.
+  cell.addEventListener("click", () => {
+    if (Date.now() < suppressClickUntil) return;
+    openModal(day, slot);
+  });
+
   row.appendChild(timeLabel);
   row.appendChild(cell);
   return row;
 }
 
 function applyCellVisual(cell, statusOrNull, note) {
-  if (statusOrNull === null || statusOrNull === undefined) {
+  if (statusOrNull === null || statusOrNull === undefined || Number(statusOrNull) === 0) {
     cell.className = "slot-cell status-empty";
     cell.dataset.status = "";
     cell.dataset.note = "";
@@ -209,7 +216,14 @@ function applyCellVisual(cell, statusOrNull, note) {
   }
 
   const status = Number(statusOrNull);
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG[0];
+  const cfg = STATUS_CONFIG[status];
+  if (!cfg) {
+    cell.className = "slot-cell status-empty";
+    cell.dataset.status = "";
+    cell.dataset.note = "";
+    cell.innerHTML = "";
+    return;
+  }
 
   cell.className = `slot-cell ${cfg.cls}`;
   cell.dataset.status = String(status);
@@ -227,13 +241,16 @@ function updateSlotCell(day, slot, statusOrNull, note) {
   const key = keyOf(day, slot);
   const existing = localData[key] || null;
 
-  if (statusOrNull === null || statusOrNull === undefined) {
+  const stNum = (statusOrNull === null || statusOrNull === undefined) ? 0 : Number(statusOrNull);
+
+  if (stNum === 0 || Number.isNaN(stNum)) {
     if (existing) {
       delete localData[key];
       markDirty();
     }
   } else {
-    const status = Number(statusOrNull);
+    const status = stNum;
+    if (!STATUS_CONFIG[status]) return;
     const next = { status, note: note || "" };
     const changed = !existing || existing.status !== next.status || (existing.note || "") !== next.note;
     if (changed) {
@@ -293,7 +310,7 @@ function initBrushBar() {
     if (!btn) return;
 
     const raw = btn.dataset.status;
-    brushStatus = (raw === "empty") ? null : Number(raw);
+    brushStatus = Number(raw);
 
     bar.querySelectorAll(".brush-btn").forEach((b) => b.classList.remove("is-active"));
     btn.classList.add("is-active");
@@ -303,7 +320,8 @@ function initBrushBar() {
 // ── 拖曳塗色（一次選多格）────────────────────────────────────────────────────
 
 let pointerState = null;
-const PAINT_START_DISTANCE_PX = 10;
+let suppressClickUntil = 0;
+const PAINT_START_DISTANCE_PX = 16;
 
 function initPaintHandlers() {
   const carousel = document.getElementById("day-carousel");
@@ -349,12 +367,8 @@ function initPaintHandlers() {
     if (!pointerState || pointerState.pointerId !== e.pointerId) return;
 
     const wasPainting = pointerState.isPainting;
-    const cell = pointerState.startCell;
     pointerState = null;
-
-    if (!wasPainting && cell) {
-      openModal(cell.dataset.day, cell.dataset.slot);
-    }
+    if (wasPainting) suppressClickUntil = Date.now() + 450;
   };
 
   carousel.addEventListener("pointerup", end);
@@ -371,13 +385,14 @@ function paintCell(cell) {
   if (pointerState.visited.has(key)) return;
   pointerState.visited.add(key);
 
-  if (brushStatus === null) {
-    updateSlotCell(day, slot, null, "");
+  if (brushStatus === 0) {
+    updateSlotCell(day, slot, 0, "");
     return;
   }
 
   const existing = localData[key] || null;
   const nextStatus = Number(brushStatus);
+  if (!STATUS_CONFIG[nextStatus]) return;
   // 避免不小心把已寫備註的格子刷過就清掉備註：狀態沒變就保留 note。
   const nextNote = (existing && existing.status === nextStatus) ? (existing.note || "") : "";
   updateSlotCell(day, slot, nextStatus, nextNote);
@@ -387,7 +402,7 @@ function paintCell(cell) {
 
 let modalDay = null;
 let modalSlot = null;
-let modalStatus = null; // null=未選取
+let modalStatus = 0; // 0=有空（預設）
 
 function initModal() {
   const overlay = document.getElementById("modal-overlay");
@@ -401,11 +416,20 @@ function initModal() {
   document.querySelectorAll(".status-option").forEach((opt) => {
     opt.addEventListener("click", () => {
       const raw = opt.dataset.status;
-      modalStatus = (raw === "empty") ? null : Number(raw);
+      modalStatus = Number(raw);
       document.querySelectorAll(".status-option").forEach((o) => o.classList.remove("selected"));
       opt.classList.add("selected");
+      updateModalNoteState();
     });
   });
+}
+
+function updateModalNoteState() {
+  const noteEl = document.getElementById("modal-note");
+  if (!noteEl) return;
+  const disabled = Number(modalStatus) === 0;
+  noteEl.disabled = disabled;
+  if (disabled) noteEl.value = "";
 }
 
 function openModal(day, slot) {
@@ -413,17 +437,17 @@ function openModal(day, slot) {
   modalSlot = slot;
 
   const entry = getEntry(day, slot);
-  modalStatus = entry ? Number(entry.status) : null;
+  modalStatus = entry ? Number(entry.status) : 0;
 
   document.getElementById("modal-title").textContent =
     `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
   document.getElementById("modal-note").value = entry ? (entry.note || "") : "";
+  updateModalNoteState();
 
   document.querySelectorAll(".status-option").forEach((opt) => {
     const raw = opt.dataset.status;
-    const st = (raw === "empty") ? null : Number(raw);
-    const selected = (st === null && modalStatus === null) || (st !== null && modalStatus === st);
-    opt.classList.toggle("selected", selected);
+    const st = Number(raw);
+    opt.classList.toggle("selected", st === modalStatus);
   });
 
   document.getElementById("modal-overlay").classList.add("show");
@@ -435,8 +459,8 @@ function closeModal() {
 
 function confirmModal() {
   const note = document.getElementById("modal-note").value.trim();
-  if (modalStatus === null) {
-    updateSlotCell(modalDay, modalSlot, null, "");
+  if (Number(modalStatus) === 0) {
+    updateSlotCell(modalDay, modalSlot, 0, "");
   } else {
     updateSlotCell(modalDay, modalSlot, modalStatus, note);
   }
@@ -455,19 +479,33 @@ async function saveSchedule() {
   saving = true;
   refreshSaveButton();
 
-  // 送全量（105格）：未選取用 status=-1，後端會 delete
+  // 只送差異，避免 sqlite 寫入過多造成 lock
   const schedules = [];
-  DAY_CODES.forEach((day) => {
-    SLOT_CODES.forEach((slot) => {
-      const key = keyOf(day, slot);
-      const entry = localData[key] || null;
-      if (!entry) {
-        schedules.push({ day, slot, status: -1, note: "" });
-      } else {
-        schedules.push({ day, slot, status: Number(entry.status), note: entry.note || "" });
-      }
-    });
-  });
+  const allKeys = new Set([...Object.keys(serverData), ...Object.keys(localData)]);
+  for (const key of allKeys) {
+    const [day, slot] = key.split("-");
+    if (!day || !slot) continue;
+
+    const s = serverData[key] || null;
+    const l = localData[key] || null;
+
+    const sStatus = s ? Number(s.status) : 0;
+    const lStatus = l ? Number(l.status) : 0;
+    const sNote = s ? (s.note || "") : "";
+    const lNote = l ? (l.note || "") : "";
+
+    if (sStatus === lStatus && sNote === lNote) continue;
+
+    if (!l) schedules.push({ day, slot, status: 0, note: "" });
+    else schedules.push({ day, slot, status: lStatus, note: lNote });
+  }
+
+  if (schedules.length === 0) {
+    dirty = false;
+    saving = false;
+    refreshSaveButton();
+    return;
+  }
 
   try {
     const resp = await fetch("/api/schedule", {
@@ -484,7 +522,14 @@ async function saveSchedule() {
       dirty = false;
       showToast("✅ 已儲存成功！");
     } else {
-      showToast("❌ 儲存失敗，請重試");
+      let msg = `❌ 儲存失敗（${resp.status}）`;
+      try {
+        const data = await resp.json();
+        if (data && data.error) msg = `❌ ${data.error}`;
+        if (resp.status === 401) msg = "❌ 登入失效，請回到 LINE 重新開啟";
+        if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
+      } catch { /* ignore */ }
+      showToast(msg);
     }
   } catch (e) {
     showToast("❌ 網路錯誤，請重試");
@@ -518,4 +563,3 @@ function debounce(fn, ms) {
     timer = setTimeout(() => fn(...args), ms);
   };
 }
-

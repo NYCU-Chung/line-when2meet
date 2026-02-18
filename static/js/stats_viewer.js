@@ -3,8 +3,18 @@
  * - 載入群組統計資料 → 渲染熱力圖 Day Carousel → 點擊格子顯示詳細
  */
 
-const STATUS_LABELS = ["有空", "上課", "忙碌", "其他"];
-const STATUS_CSS = ["status-free", "status-class", "status-busy", "status-other"];
+const STATUS_LABELS = {
+  1: "上課",
+  2: "忙碌",
+  3: "其他",
+  4: "睡覺",
+};
+const STATUS_CSS = {
+  1: "status-class",
+  2: "status-busy",
+  3: "status-other",
+  4: "status-sleep",
+};
 
 let statsData = null;
 let groupId = null;
@@ -40,7 +50,7 @@ async function loadStats() {
   statsData = await resp.json();
 
   document.getElementById("stat-summary").textContent =
-    `共 ${statsData.total_users} 人填寫`;
+    `共 ${statsData.total_users} 人參與`;
 }
 
 // ── 渲染 Carousel ─────────────────────────────────────────────────────────────
@@ -66,7 +76,7 @@ function renderCarousel() {
     const slotList = card.querySelector(`#slots-${day}`);
     SLOT_CODES.forEach((slot) => {
       const key = `${day}-${slot}`;
-      const slotInfo = statsData.slots[key] || { free_count: 0, known_count: 0, unknown_count: total, details: [] };
+      const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
       const row = createSlotRow(day, slot, slotInfo, total);
       slotList.appendChild(row);
     });
@@ -179,34 +189,26 @@ function showDetail(day, slot, slotInfo, total) {
 
   const details = (slotInfo && slotInfo.details) ? slotInfo.details : [];
   const freeCount = (slotInfo && typeof slotInfo.free_count === "number") ? slotInfo.free_count : 0;
-  const unknownCount = (slotInfo && typeof slotInfo.unknown_count === "number")
-    ? slotInfo.unknown_count
-    : Math.max(0, total - details.length);
+  const busyCount = details.length;
 
   document.getElementById("panel-title").textContent =
     `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
   document.getElementById("panel-free-count").textContent =
     (total > 0)
-      ? `有空 ${freeCount} / ${total} 人（未選取 ${unknownCount} 人）`
-      : "尚無人填寫";
+      ? `有空 ${freeCount} / ${total} 人（非空閒 ${busyCount} 人）`
+      : "尚無人參與";
 
   const list = document.getElementById("detail-list");
   list.innerHTML = "";
 
-  const freeDetails = details.filter((d) => d.status === 0);
-  const otherDetails = details.filter((d) => d.status !== 0);
-  const allDetails = [...freeDetails, ...otherDetails];
-
   if (total === 0) {
-    list.innerHTML = `<div style="color:#aaa;text-align:center;padding:20px">尚無人填寫</div>`;
+    list.innerHTML = `<div style="color:#aaa;text-align:center;padding:20px">尚無人參與</div>`;
   } else {
-    if (freeDetails.length === 0) {
-      list.innerHTML += `<div style="color:#888;padding:12px 0;font-size:12px">目前沒有「有空」的人</div>`;
+    if (details.length === 0) {
+      list.innerHTML = `<div style="color:#2E7D32;text-align:center;padding:18px 0;font-weight:700">✅ 此時段所有人都有空</div>`;
     } else {
-      list.innerHTML += `<div style="color:#666;padding:10px 0 6px;font-size:12px;font-weight:700">✅ 有空</div>`;
-    }
-
-    allDetails.forEach((item) => {
+      const sorted = [...details].sort((a, b) => Number(a.status) - Number(b.status));
+      sorted.forEach((item) => {
       const div = document.createElement("div");
       div.className = "detail-item";
       div.innerHTML = `
@@ -215,18 +217,12 @@ function showDetail(day, slot, slotInfo, total) {
           <div class="detail-name">${escHtml(item.display_name)}</div>
           ${item.note ? `<div class="detail-note">${escHtml(item.note)}</div>` : ""}
         </div>
-        <div class="detail-status ${STATUS_CSS[item.status]}">
-          ${STATUS_LABELS[item.status]}
+        <div class="detail-status ${STATUS_CSS[item.status] || "status-other"}">
+          ${STATUS_LABELS[item.status] || "其他"}
         </div>
       `;
       list.appendChild(div);
-    });
-
-    if (unknownCount > 0) {
-      const info = document.createElement("div");
-      info.style.cssText = "color:#aaa;text-align:center;padding:14px 0 6px;font-size:12px";
-      info.textContent = `未選取 ${unknownCount} 人（未填或未勾選此時段）`;
-      list.appendChild(info);
+      });
     }
   }
 

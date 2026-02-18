@@ -1,3 +1,4 @@
+import sqlite3
 from models.database import DAY_CODES, SLOT_CODES, STATUS_LABELS
 
 
@@ -20,25 +21,33 @@ def save_user_schedule(conn, line_user_id, group_id, schedules):
     批次儲存使用者排程。schedules 為 list of dict:
       [{"day": "M", "slot": "1", "status": 1, "note": "微積分"}, ...]
 
-    status=-1 代表「未選取/清除」：刪除記錄。
-    status=0~3 代表使用者明確選取的狀態：都會儲存（包含 status=0 有空）。
+    規則（預設有空）：
+    - status=0 代表有空（預設值）：不儲存，直接刪除記錄（回到預設）
+    - status=1~4 代表非空閒（上課/忙碌/其他/睡覺）：會儲存
     """
     for s in schedules:
-        day = s["day"]
-        slot = s["slot"]
-        status = int(s["status"])
+        day = s.get("day")
+        slot = s.get("slot")
+        if day is None or slot is None:
+            continue
+
+        try:
+            status = int(s.get("status"))
+        except Exception:
+            continue
+
         note = s.get("note", "")
 
         if day not in DAY_CODES or slot not in SLOT_CODES:
             continue
 
-        if status == -1:
-            # 未選取/清除
+        if status == 0:
+            # 有空 = 刪除記錄（還原預設）
             conn.execute(
                 "DELETE FROM schedules WHERE line_user_id=? AND group_id=? AND day_code=? AND slot_code=?",
                 (line_user_id, group_id, day, slot),
             )
-        elif status in (0, 1, 2, 3):
+        elif status in (1, 2, 3, 4):
             conn.execute(
                 """INSERT INTO schedules (line_user_id, group_id, day_code, slot_code, status, note, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -69,19 +78,38 @@ def get_group_stats(conn, group_id):
         }
       }
     """
-    # 有填寫過的使用者
-    user_rows = conn.execute(
-        """SELECT DISTINCT s.line_user_id, u.display_name, u.picture_url
-           FROM schedules s
-           JOIN users u ON u.line_user_id = s.line_user_id
-           WHERE s.group_id = ?""",
-        (group_id,),
-    ).fetchall()
+    # 有參與的使用者（以打開過 LIFF/auth 為準）；若舊 DB 尚未有 group_users table，退回舊邏輯。
+    try:
+        user_rows = conn.execute(
+            """SELECT gu.line_user_id, u.display_name, u.picture_url
+               FROM group_users gu
+               JOIN users u ON u.line_user_id = gu.line_user_id
+               WHERE gu.group_id = ?
+               ORDER BY gu.last_seen_at DESC""",
+            (group_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        user_rows = conn.execute(
+            """SELECT DISTINCT s.line_user_id, u.display_name, u.picture_url
+               FROM schedules s
+               JOIN users u ON u.line_user_id = s.line_user_id
+               WHERE s.group_id = ?""",
+            (group_id,),
+        ).fetchall()
+    else:
+        # If group_users exists but is empty (old data), fall back to schedules.
+        if not user_rows:
+            user_rows = conn.execute(
+                """SELECT DISTINCT s.line_user_id, u.display_name, u.picture_url
+                   FROM schedules s
+                   JOIN users u ON u.line_user_id = s.line_user_id
+                   WHERE s.group_id = ?""",
+                (group_id,),
+            ).fetchall()
 
     total_users = len(user_rows)
-    user_map = {r["line_user_id"]: {"display_name": r["display_name"], "picture_url": r["picture_url"]} for r in user_rows}
 
-    # 所有記錄（包含有空）
+    # 所有非空閒記錄（status=1~4）
     schedule_rows = conn.execute(
         """SELECT s.line_user_id, s.day_code, s.slot_code, s.status, s.note,
                   u.display_name
@@ -91,7 +119,7 @@ def get_group_stats(conn, group_id):
         (group_id,),
     ).fetchall()
 
-    # 建立 slot → details 的 mapping（含所有已選取的人）
+    # 建立 slot → details（只含非空閒的人）
     slots = {}
     for row in schedule_rows:
         key = f"{row['day_code']}-{row['slot_code']}"
@@ -102,16 +130,14 @@ def get_group_stats(conn, group_id):
                 "user_id": row["line_user_id"],
                 "display_name": row["display_name"],
                 "status": row["status"],
-                "status_label": STATUS_LABELS[row["status"]],
+                "status_label": STATUS_LABELS.get(row["status"], str(row["status"])),
                 "note": row["note"],
             }
         )
 
-    # 計算每個 slot 的 free_count（status=0）
+    # 計算每個 slot 的 free_count（預設有空，所以 free = total - busy）
     for key in slots:
-        free_count = sum(1 for d in slots[key]["details"] if d["status"] == 0)
-        slots[key]["free_count"] = free_count
-        slots[key]["known_count"] = len(slots[key]["details"])
-        slots[key]["unknown_count"] = max(0, total_users - slots[key]["known_count"])
+        busy_count = len(slots[key]["details"])
+        slots[key]["free_count"] = max(0, total_users - busy_count)
 
     return {"total_users": total_users, "slots": slots}

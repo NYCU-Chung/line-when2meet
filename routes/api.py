@@ -1,7 +1,7 @@
 import requests
 from flask import Blueprint, request, jsonify
 from config import Config
-from models.database import get_db, upsert_user
+from models.database import get_db, upsert_user, upsert_group_user
 from services.schedule_service import get_user_schedule, save_user_schedule, get_group_stats
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -49,6 +49,7 @@ def auth():
     conn = get_db()
     try:
         upsert_user(conn, user_id, display_name, picture_url)
+        upsert_group_user(conn, int(group_id), user_id)
     finally:
         conn.close()
 
@@ -73,6 +74,7 @@ def get_schedule():
     conn = get_db()
     try:
         upsert_user(conn, user_id, display_name, picture_url)
+        upsert_group_user(conn, group_id, user_id)
         schedule = get_user_schedule(conn, user_id, group_id)
     finally:
         conn.close()
@@ -103,7 +105,12 @@ def post_schedule():
     conn = get_db()
     try:
         upsert_user(conn, user_id, display_name, picture_url)
-        save_user_schedule(conn, user_id, group_id, schedules)
+        upsert_group_user(conn, int(group_id), user_id)
+        try:
+            save_user_schedule(conn, user_id, group_id, schedules)
+        except Exception as e:
+            # Return a short error for UI debugging; detailed stack is in logs.
+            return jsonify({"error": "save failed", "detail": str(e)}), 500
     finally:
         conn.close()
 
