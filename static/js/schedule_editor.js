@@ -1,24 +1,64 @@
 /**
  * 課表填寫頁邏輯
- * - LIFF 登入 → 載入個人排程 → 渲染 Day Carousel → 儲存
+ * - LIFF 登入 → 載入個人排程 → 支援拖曳一次塗多格 → 儲存
+ *
+ * 狀態說明：
+ * - 未選取：不儲存（前端顯示白/灰）
+ * - 0~3：明確選取，全部都會儲存（包含 0=有空）
  */
 
-const STATUS_CONFIG = [
-  { label: "有空",   icon: "✅", cls: "status-0" },
-  { label: "上課",   icon: "📚", cls: "status-1" },
-  { label: "忙碌",   icon: "🔴", cls: "status-2" },
-  { label: "其他",   icon: "⚪", cls: "status-3" },
-];
+const STATUS_CONFIG = {
+  0: { label: "有空", icon: "✅", cls: "status-0" },
+  1: { label: "上課", icon: "📚", cls: "status-1" },
+  2: { label: "忙碌", icon: "🔴", cls: "status-2" },
+  3: { label: "其他", icon: "⚪", cls: "status-3" },
+};
 
-// 伺服器回傳的 {day-slot: {status, note}}，用來追蹤變更
+// 伺服器回傳的 {day-slot: {status, note}}（只包含已選取的格子）
 let serverData = {};
-// 本地端編輯中的狀態 {day-slot: {status, note}}
+// 本地端編輯中的 {day-slot: {status, note}}（只包含已選取的格子）
 let localData = {};
+
 let groupId = null;
 let currentDayIndex = 0;
 
-// 從 Flask 模板注入
-// DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 透過 HTML 的 <script> 注入
+let dirty = false;
+let saving = false;
+
+// 筆刷狀態：null 代表清除/未選取
+let brushStatus = 0;
+
+function keyOf(day, slot) {
+  return `${day}-${slot}`;
+}
+
+function getEntry(day, slot) {
+  return localData[keyOf(day, slot)] || null;
+}
+
+function setEntry(day, slot, statusOrNull, note) {
+  const key = keyOf(day, slot);
+  if (statusOrNull === null || statusOrNull === undefined) {
+    delete localData[key];
+    return;
+  }
+  localData[key] = { status: statusOrNull, note: note || "" };
+}
+
+function markDirty() {
+  if (!dirty) dirty = true;
+  refreshSaveButton();
+}
+
+function refreshSaveButton() {
+  const btn = document.getElementById("save-btn");
+  if (!btn) return;
+
+  btn.disabled = saving || !dirty;
+  if (saving) btn.textContent = "儲存中...";
+  else if (dirty) btn.textContent = "儲存";
+  else btn.textContent = "已儲存";
+}
 
 // ── 初始化 ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +66,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   groupId = LiffHelper.getParam("group");
 
   if (!groupId) {
-    // LIFF may rewrite query into `liff.state`; LiffHelper.getParam() handles that.
     showError("缺少群組資訊，請從 LINE 群組內點擊卡片連結進入。");
     return;
   }
@@ -48,28 +87,35 @@ window.addEventListener("DOMContentLoaded", async () => {
   await fetch("/api/auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: LiffHelper.getIdToken(), group_id: parseInt(groupId) }),
+    body: JSON.stringify({ id_token: LiffHelper.getIdToken(), group_id: parseInt(groupId, 10) }),
   });
 
-  // 載入個人排程
   await loadSchedule();
+
   renderCarousel();
   initDayIndicator();
   initModal();
+  initBrushBar();
+  initPaintHandlers();
   initSaveButton();
+
+  dirty = false;
+  refreshSaveButton();
 });
 
 // ── 載入排程 ─────────────────────────────────────────────────────────────────
 
 async function loadSchedule() {
-  const resp = await fetch(`/api/schedule?group_id=${groupId}`, {
+  const resp = await fetch(`/api/schedule?group_id=${encodeURIComponent(groupId)}`, {
     headers: { Authorization: `Bearer ${LiffHelper.getIdToken()}` },
   });
-  if (resp.ok) {
-    const data = await resp.json();
-    serverData = data.schedules || {};
-    localData = JSON.parse(JSON.stringify(serverData)); // deep copy
+  if (!resp.ok) {
+    showToast("⚠️ 載入失敗，請稍後重試");
+    return;
   }
+  const data = await resp.json();
+  serverData = data.schedules || {};
+  localData = JSON.parse(JSON.stringify(serverData)); // deep copy
 }
 
 // ── 渲染 Carousel ──────────────────────────────────────────────────────────
@@ -81,7 +127,7 @@ function renderCarousel() {
   DAY_CODES.forEach((day, dayIdx) => {
     const card = document.createElement("div");
     card.className = `day-card${dayIdx === 0 ? " active" : ""}`;
-    card.dataset.dayIdx = dayIdx;
+    card.dataset.dayIdx = String(dayIdx);
 
     card.innerHTML = `
       <div class="day-card-header">
@@ -93,9 +139,8 @@ function renderCarousel() {
 
     const slotList = card.querySelector(`#slots-${day}`);
     SLOT_CODES.forEach((slot) => {
-      const key = `${day}-${slot}`;
-      const entry = localData[key] || { status: 0, note: "" };
-      const row = createSlotRow(day, slot, entry.status, entry.note);
+      const entry = getEntry(day, slot);
+      const row = createSlotRow(day, slot, entry);
       slotList.appendChild(row);
     });
 
@@ -127,58 +172,79 @@ function renderCarousel() {
     }
   }, 50);
 
-  carousel.addEventListener("scroll", scrollHandler);
+  carousel.addEventListener("scroll", scrollHandler, { passive: true });
 }
 
-function createSlotRow(day, slot, status, note) {
+function createSlotRow(day, slot, entryOrNull) {
   const row = document.createElement("div");
   row.className = "slot-row";
-  row.dataset.day = day;
-  row.dataset.slot = slot;
 
   const timeLabel = document.createElement("div");
   timeLabel.className = "slot-time-label";
   timeLabel.innerHTML = `<strong>${slot}</strong>${SLOT_TIMES[slot].replace("~", "<br>")}`;
 
   const cell = document.createElement("div");
-  cell.className = `slot-cell status-${status}`;
+  cell.className = "slot-cell";
   cell.dataset.day = day;
   cell.dataset.slot = slot;
-  cell.dataset.status = status;
-  cell.dataset.note = note;
 
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG[0];
-  cell.innerHTML = `
-    <span class="slot-icon">${status === 0 ? "" : cfg.icon}</span>
-    <span class="slot-label">${status === 0 ? "" : cfg.label}</span>
-    ${note ? `<span class="slot-note-indicator">✏️</span>` : ""}
-  `;
-
-  cell.addEventListener("click", () => openModal(day, slot));
+  if (!entryOrNull) {
+    applyCellVisual(cell, null, "");
+  } else {
+    applyCellVisual(cell, entryOrNull.status, entryOrNull.note || "");
+  }
 
   row.appendChild(timeLabel);
   row.appendChild(cell);
   return row;
 }
 
-function updateSlotCell(day, slot, status, note) {
-  const key = `${day}-${slot}`;
-  localData[key] = { status, note };
+function applyCellVisual(cell, statusOrNull, note) {
+  if (statusOrNull === null || statusOrNull === undefined) {
+    cell.className = "slot-cell status-empty";
+    cell.dataset.status = "";
+    cell.dataset.note = "";
+    cell.innerHTML = "";
+    return;
+  }
+
+  const status = Number(statusOrNull);
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG[0];
+
+  cell.className = `slot-cell ${cfg.cls}`;
+  cell.dataset.status = String(status);
+  cell.dataset.note = note || "";
+
+  const showNote = (note || "").trim().length > 0;
+  cell.innerHTML = `
+    <span class="slot-icon">${cfg.icon}</span>
+    <span class="slot-label">${cfg.label}</span>
+    ${showNote ? `<span class="slot-note-indicator">✏️</span>` : ""}
+  `;
+}
+
+function updateSlotCell(day, slot, statusOrNull, note) {
+  const key = keyOf(day, slot);
+  const existing = localData[key] || null;
+
+  if (statusOrNull === null || statusOrNull === undefined) {
+    if (existing) {
+      delete localData[key];
+      markDirty();
+    }
+  } else {
+    const status = Number(statusOrNull);
+    const next = { status, note: note || "" };
+    const changed = !existing || existing.status !== next.status || (existing.note || "") !== next.note;
+    if (changed) {
+      localData[key] = next;
+      markDirty();
+    }
+  }
 
   const cell = document.querySelector(`.slot-cell[data-day="${day}"][data-slot="${slot}"]`);
   if (!cell) return;
-
-  cell.className = `slot-cell status-${status}`;
-  cell.dataset.status = status;
-  cell.dataset.note = note;
-
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG[0];
-  cell.innerHTML = `
-    <span class="slot-icon">${status === 0 ? "" : cfg.icon}</span>
-    <span class="slot-label">${status === 0 ? "" : cfg.label}</span>
-    ${note ? `<span class="slot-note-indicator">✏️</span>` : ""}
-  `;
-  cell.addEventListener("click", () => openModal(day, slot));
+  applyCellVisual(cell, statusOrNull, note);
 }
 
 // ── 星期指示列 ────────────────────────────────────────────────────────────────
@@ -200,13 +266,6 @@ function updateDayIndicator() {
   document.querySelectorAll(".day-dot").forEach((dot, idx) => {
     dot.classList.toggle("active", idx === currentDayIndex);
   });
-
-  // 更新卡片 header 顏色
-  const activeCard = document.querySelector(".day-card.active");
-  if (activeCard) {
-    const header = activeCard.querySelector(".day-card-header");
-    if (header) header.style.background = "#4CAF50";
-  }
 }
 
 function updateActiveCard() {
@@ -223,11 +282,112 @@ function scrollToDay(idx) {
   }
 }
 
-// ── Modal（格子編輯）────────────────────────────────────────────────────────
+// ── 筆刷 ─────────────────────────────────────────────────────────────────────
+
+function initBrushBar() {
+  const bar = document.getElementById("brushbar");
+  if (!bar) return;
+
+  bar.addEventListener("click", (e) => {
+    const btn = e.target.closest(".brush-btn");
+    if (!btn) return;
+
+    const raw = btn.dataset.status;
+    brushStatus = (raw === "empty") ? null : Number(raw);
+
+    bar.querySelectorAll(".brush-btn").forEach((b) => b.classList.remove("is-active"));
+    btn.classList.add("is-active");
+  });
+}
+
+// ── 拖曳塗色（一次選多格）────────────────────────────────────────────────────
+
+let pointerState = null;
+const PAINT_START_DISTANCE_PX = 10;
+
+function initPaintHandlers() {
+  const carousel = document.getElementById("day-carousel");
+  if (!carousel) return;
+
+  carousel.addEventListener("pointerdown", (e) => {
+    const cell = e.target.closest(".slot-cell");
+    if (!cell) return;
+
+    pointerState = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startCell: cell,
+      isPainting: false,
+      visited: new Set(),
+    };
+
+    try { cell.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+  });
+
+  carousel.addEventListener("pointermove", (e) => {
+    if (!pointerState || pointerState.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - pointerState.startX;
+    const dy = e.clientY - pointerState.startY;
+    const dist2 = dx * dx + dy * dy;
+
+    if (!pointerState.isPainting && dist2 > (PAINT_START_DISTANCE_PX * PAINT_START_DISTANCE_PX)) {
+      pointerState.isPainting = true;
+      paintCell(pointerState.startCell);
+    }
+
+    if (!pointerState.isPainting) return;
+
+    e.preventDefault();
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el && el.closest ? el.closest(".slot-cell") : null;
+    if (cell) paintCell(cell);
+  }, { passive: false });
+
+  const end = (e) => {
+    if (!pointerState || pointerState.pointerId !== e.pointerId) return;
+
+    const wasPainting = pointerState.isPainting;
+    const cell = pointerState.startCell;
+    pointerState = null;
+
+    if (!wasPainting && cell) {
+      openModal(cell.dataset.day, cell.dataset.slot);
+    }
+  };
+
+  carousel.addEventListener("pointerup", end);
+  carousel.addEventListener("pointercancel", end);
+}
+
+function paintCell(cell) {
+  if (!pointerState) return;
+  const day = cell.dataset.day;
+  const slot = cell.dataset.slot;
+  if (!day || !slot) return;
+
+  const key = keyOf(day, slot);
+  if (pointerState.visited.has(key)) return;
+  pointerState.visited.add(key);
+
+  if (brushStatus === null) {
+    updateSlotCell(day, slot, null, "");
+    return;
+  }
+
+  const existing = localData[key] || null;
+  const nextStatus = Number(brushStatus);
+  // 避免不小心把已寫備註的格子刷過就清掉備註：狀態沒變就保留 note。
+  const nextNote = (existing && existing.status === nextStatus) ? (existing.note || "") : "";
+  updateSlotCell(day, slot, nextStatus, nextNote);
+}
+
+// ── Modal（單格編輯）────────────────────────────────────────────────────────
 
 let modalDay = null;
 let modalSlot = null;
-let modalStatus = 0;
+let modalStatus = null; // null=未選取
 
 function initModal() {
   const overlay = document.getElementById("modal-overlay");
@@ -240,7 +400,8 @@ function initModal() {
 
   document.querySelectorAll(".status-option").forEach((opt) => {
     opt.addEventListener("click", () => {
-      modalStatus = parseInt(opt.dataset.status);
+      const raw = opt.dataset.status;
+      modalStatus = (raw === "empty") ? null : Number(raw);
       document.querySelectorAll(".status-option").forEach((o) => o.classList.remove("selected"));
       opt.classList.add("selected");
     });
@@ -251,16 +412,18 @@ function openModal(day, slot) {
   modalDay = day;
   modalSlot = slot;
 
-  const key = `${day}-${slot}`;
-  const entry = localData[key] || { status: 0, note: "" };
-  modalStatus = entry.status;
+  const entry = getEntry(day, slot);
+  modalStatus = entry ? Number(entry.status) : null;
 
   document.getElementById("modal-title").textContent =
     `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
-  document.getElementById("modal-note").value = entry.note || "";
+  document.getElementById("modal-note").value = entry ? (entry.note || "") : "";
 
   document.querySelectorAll(".status-option").forEach((opt) => {
-    opt.classList.toggle("selected", parseInt(opt.dataset.status) === modalStatus);
+    const raw = opt.dataset.status;
+    const st = (raw === "empty") ? null : Number(raw);
+    const selected = (st === null && modalStatus === null) || (st !== null && modalStatus === st);
+    opt.classList.toggle("selected", selected);
   });
 
   document.getElementById("modal-overlay").classList.add("show");
@@ -272,7 +435,11 @@ function closeModal() {
 
 function confirmModal() {
   const note = document.getElementById("modal-note").value.trim();
-  updateSlotCell(modalDay, modalSlot, modalStatus, note);
+  if (modalStatus === null) {
+    updateSlotCell(modalDay, modalSlot, null, "");
+  } else {
+    updateSlotCell(modalDay, modalSlot, modalStatus, note);
+  }
   closeModal();
 }
 
@@ -283,16 +450,22 @@ function initSaveButton() {
 }
 
 async function saveSchedule() {
-  const btn = document.getElementById("save-btn");
-  btn.disabled = true;
-  btn.textContent = "儲存中...";
+  if (saving || !dirty) return;
 
+  saving = true;
+  refreshSaveButton();
+
+  // 送全量（105格）：未選取用 status=-1，後端會 delete
   const schedules = [];
   DAY_CODES.forEach((day) => {
     SLOT_CODES.forEach((slot) => {
-      const key = `${day}-${slot}`;
-      const entry = localData[key] || { status: 0, note: "" };
-      schedules.push({ day, slot, status: entry.status, note: entry.note || "" });
+      const key = keyOf(day, slot);
+      const entry = localData[key] || null;
+      if (!entry) {
+        schedules.push({ day, slot, status: -1, note: "" });
+      } else {
+        schedules.push({ day, slot, status: Number(entry.status), note: entry.note || "" });
+      }
     });
   });
 
@@ -303,11 +476,12 @@ async function saveSchedule() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${LiffHelper.getIdToken()}`,
       },
-      body: JSON.stringify({ group_id: parseInt(groupId), schedules }),
+      body: JSON.stringify({ group_id: parseInt(groupId, 10), schedules }),
     });
 
     if (resp.ok) {
       serverData = JSON.parse(JSON.stringify(localData));
+      dirty = false;
       showToast("✅ 已儲存成功！");
     } else {
       showToast("❌ 儲存失敗，請重試");
@@ -315,8 +489,8 @@ async function saveSchedule() {
   } catch (e) {
     showToast("❌ 網路錯誤，請重試");
   } finally {
-    btn.disabled = false;
-    btn.textContent = "儲存";
+    saving = false;
+    refreshSaveButton();
   }
 }
 
@@ -344,3 +518,4 @@ function debounce(fn, ms) {
     timer = setTimeout(() => fn(...args), ms);
   };
 }
+

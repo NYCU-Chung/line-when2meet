@@ -84,6 +84,60 @@ body {
   border-radius: 3px;
 }
 
+/* ── 筆刷 ── */
+.brushbar {
+  margin: 10px 16px 0;
+  padding: 12px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.brushbar-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #666;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.brushbar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.brush-btn {
+  appearance: none;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  color: #333;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.brush-btn.is-active {
+  border-color: #4CAF50;
+  background: #E8F5E9;
+  font-weight: 700;
+}
+
+.brush-btn-erase.is-active {
+  border-color: #999;
+  background: #f0f0f0;
+}
+
+.brushbar-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.35;
+}
+
 /* ── Carousel ── */
 .carousel-wrapper {
   overflow: hidden;
@@ -184,6 +238,8 @@ body {
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   position: relative;
+  /* Make drag-to-paint reliable on mobile. Users can still scroll using the time labels. */
+  touch-action: none;
 }
 
 .slot-cell:active {
@@ -298,6 +354,7 @@ body {
 }
 
 .status-option.selected { border-color: #4CAF50; background: #E8F5E9; }
+.status-option[data-status="empty"].selected { border-color: #999; background: #FAFAFA; }
 .status-option[data-status="0"].selected { border-color: #4CAF50; background: #E8F5E9; }
 .status-option[data-status="1"].selected { border-color: #2196F3; background: #E3F2FD; }
 .status-option[data-status="2"].selected { border-color: #F44336; background: #FFEBEE; }
@@ -378,6 +435,7 @@ body {
 .bg-class { background: #2196F3; }
 .bg-busy  { background: #F44336; }
 .bg-other { background: #9E9E9E; }
+.bg-empty { background: #e0e0e0; }
 
 /* ── Loading ── */
 .loading {

@@ -29,10 +29,24 @@
   <div class="content-padding">
     <!-- 圖例 -->
     <div class="legend">
+      <div class="legend-item"><div class="legend-dot bg-empty"></div> 未選取</div>
       <div class="legend-item"><div class="legend-dot bg-free"></div> 有空</div>
       <div class="legend-item"><div class="legend-dot bg-class"></div> 上課</div>
       <div class="legend-item"><div class="legend-dot bg-busy"></div> 忙碌</div>
       <div class="legend-item"><div class="legend-dot bg-other"></div> 其他</div>
+    </div>
+
+    <!-- 筆刷（拖曳可一次選多格） -->
+    <div class="brushbar">
+      <div class="brushbar-title">筆刷</div>
+      <div class="brushbar-buttons" id="brushbar">
+        <button type="button" class="brush-btn is-active" data-status="0">✅ 有空</button>
+        <button type="button" class="brush-btn" data-status="1">📚 上課</button>
+        <button type="button" class="brush-btn" data-status="2">🔴 忙碌</button>
+        <button type="button" class="brush-btn" data-status="3">⚪ 其他</button>
+        <button type="button" class="brush-btn brush-btn-erase" data-status="empty">✖ 清除</button>
+      </div>
+      <div class="brushbar-hint">提示：在格子上拖曳可一次塗多格；點一下可編輯備註。</div>
     </div>
 
     <!-- Day Carousel -->
@@ -53,6 +67,7 @@
     <div class="modal-title" id="modal-title"></div>
 
     <div class="status-options">
+      <div class="status-option" data-status="empty">🚫 未選取</div>
       <div class="status-option" data-status="0">✅ 有空</div>
       <div class="status-option" data-status="1">📚 上課</div>
       <div class="status-option" data-status="2">🔴 忙碌</div>

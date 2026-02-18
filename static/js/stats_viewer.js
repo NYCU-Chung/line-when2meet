@@ -66,9 +66,8 @@ function renderCarousel() {
     const slotList = card.querySelector(`#slots-${day}`);
     SLOT_CODES.forEach((slot) => {
       const key = `${day}-${slot}`;
-      const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
-      const freeCount = slotInfo.free_count;
-      const row = createSlotRow(day, slot, freeCount, total, slotInfo.details);
+      const slotInfo = statsData.slots[key] || { free_count: 0, known_count: 0, unknown_count: total, details: [] };
+      const row = createSlotRow(day, slot, slotInfo, total);
       slotList.appendChild(row);
     });
 
@@ -95,7 +94,7 @@ function renderCarousel() {
   carousel.addEventListener("scroll", scrollHandler);
 }
 
-function createSlotRow(day, slot, freeCount, total, details) {
+function createSlotRow(day, slot, slotInfo, total) {
   const row = document.createElement("div");
   row.className = "slot-row";
 
@@ -107,6 +106,7 @@ function createSlotRow(day, slot, freeCount, total, details) {
   cell.className = "slot-cell";
 
   // 熱力圖：依有空比例調色（白 → 深綠）
+  const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
   const ratio = total > 0 ? freeCount / total : 0;
   const bg = heatColor(ratio);
   cell.style.background = bg;
@@ -118,7 +118,7 @@ function createSlotRow(day, slot, freeCount, total, details) {
   cell.appendChild(countEl);
 
   // 點擊 → 顯示詳細
-  cell.addEventListener("click", () => showDetail(day, slot, freeCount, total, details));
+  cell.addEventListener("click", () => showDetail(day, slot, slotInfo, total));
 
   row.appendChild(timeLabel);
   row.appendChild(cell);
@@ -173,40 +173,39 @@ function initDetailPanel() {
   document.getElementById("panel-overlay").addEventListener("click", hideDetail);
 }
 
-function showDetail(day, slot, freeCount, total, busyDetails) {
+function showDetail(day, slot, slotInfo, total) {
   const panel = document.getElementById("detail-panel");
   const overlay = document.getElementById("panel-overlay");
+
+  const details = (slotInfo && slotInfo.details) ? slotInfo.details : [];
+  const freeCount = (slotInfo && typeof slotInfo.free_count === "number") ? slotInfo.free_count : 0;
+  const unknownCount = (slotInfo && typeof slotInfo.unknown_count === "number")
+    ? slotInfo.unknown_count
+    : Math.max(0, total - details.length);
 
   document.getElementById("panel-title").textContent =
     `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
   document.getElementById("panel-free-count").textContent =
-    `有空 ${freeCount} / ${total} 人`;
+    (total > 0)
+      ? `有空 ${freeCount} / ${total} 人（未選取 ${unknownCount} 人）`
+      : "尚無人填寫";
 
   const list = document.getElementById("detail-list");
   list.innerHTML = "";
 
-  // 先顯示有空的人（不在 busyDetails 裡的使用者）
-  // 只能顯示有填寫過的人，有空的人是 total - busyDetails
-  const busyUserIds = new Set(busyDetails.map((d) => d.user_id));
+  const freeDetails = details.filter((d) => d.status === 0);
+  const otherDetails = details.filter((d) => d.status !== 0);
+  const allDetails = [...freeDetails, ...otherDetails];
 
-  // 非忙碌的人（有空）
-  // 取得所有有填寫的使用者（透過 statsData.slots 所有 detail 找）
-  const allUsersMap = {};
-  Object.values(statsData.slots).forEach((slotInfo) => {
-    (slotInfo.details || []).forEach((d) => {
-      allUsersMap[d.user_id] = d.display_name;
-    });
-  });
-
-  const freeUsers = Object.entries(allUsersMap)
-    .filter(([uid]) => !busyUserIds.has(uid))
-    .map(([uid, name]) => ({ user_id: uid, display_name: name, status: 0, note: "" }));
-
-  const allDetails = [...freeUsers, ...busyDetails];
-
-  if (allDetails.length === 0) {
+  if (total === 0) {
     list.innerHTML = `<div style="color:#aaa;text-align:center;padding:20px">尚無人填寫</div>`;
   } else {
+    if (freeDetails.length === 0) {
+      list.innerHTML += `<div style="color:#888;padding:12px 0;font-size:12px">目前沒有「有空」的人</div>`;
+    } else {
+      list.innerHTML += `<div style="color:#666;padding:10px 0 6px;font-size:12px;font-weight:700">✅ 有空</div>`;
+    }
+
     allDetails.forEach((item) => {
       const div = document.createElement("div");
       div.className = "detail-item";
@@ -222,6 +221,13 @@ function showDetail(day, slot, freeCount, total, busyDetails) {
       `;
       list.appendChild(div);
     });
+
+    if (unknownCount > 0) {
+      const info = document.createElement("div");
+      info.style.cssText = "color:#aaa;text-align:center;padding:14px 0 6px;font-size:12px";
+      info.textContent = `未選取 ${unknownCount} 人（未填或未勾選此時段）`;
+      list.appendChild(info);
+    }
   }
 
   overlay.classList.add("show");
