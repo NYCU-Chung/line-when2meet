@@ -160,15 +160,14 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 async function loadSchedule() {
   try {
-    const resp = await fetch(`/api/schedule?group=${encodeURIComponent(groupId)}`, {
-      headers: { Authorization: `Bearer ${LiffHelper.getIdToken()}` },
-    });
+    const resp = await fetchWithAuthRetry(`/api/schedule?group=${encodeURIComponent(groupId)}`);
     if (!resp.ok) {
       let msg = `載入失敗（${resp.status}）`;
       try {
         const data = await resp.json();
         if (data && data.error) msg = String(data.error);
-        if (resp.status === 401) msg = "登入失效，請回到 LINE 重新開啟";
+        if (resp.status === 401) msg = "登入狀態失效，請重新整理；若仍失敗請回到 LINE 重新開啟";
+        if (resp.status === 503) msg = "LINE 驗證服務暫時忙碌，請稍候重試";
         if (resp.status === 410) msg = "連結已過期，請回到群組輸入 when2meet 取得新連結";
         if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
       } catch { /* ignore */ }
@@ -635,11 +634,10 @@ async function saveSchedule() {
   }
 
   try {
-    const resp = await fetch("/api/schedule", {
+    const resp = await fetchWithAuthRetry("/api/schedule", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LiffHelper.getIdToken()}`,
       },
       body: JSON.stringify({ group: groupId, schedules }),
     });
@@ -653,7 +651,8 @@ async function saveSchedule() {
       try {
         const data = await resp.json();
         if (data && data.error) msg = `❌ ${data.error}`;
-        if (resp.status === 401) msg = "❌ 登入失效，請回到 LINE 重新開啟";
+        if (resp.status === 401) msg = "❌ 登入狀態失效，請重新整理；若仍失敗請回到 LINE 重新開啟";
+        if (resp.status === 503) msg = "❌ LINE 驗證服務暫時忙碌，請稍候重試";
         if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
       } catch { /* ignore */ }
       showToast(msg);
@@ -681,6 +680,24 @@ function showError(msg) {
       <div class="loading-error-icon">⚠️</div>
       <div>${msg}</div>
     </div>`;
+}
+
+async function fetchWithAuthRetry(url, options = {}, retried = false) {
+  const headers = {
+    ...(options.headers || {}),
+    Authorization: `Bearer ${LiffHelper.getIdToken() || ""}`,
+  };
+  const resp = await fetch(url, { ...options, headers });
+  if (resp.status !== 401 || retried) {
+    return resp;
+  }
+
+  const recovered = await LiffHelper.recoverAuth(LIFF_ID);
+  if (!recovered) {
+    return resp;
+  }
+
+  return fetchWithAuthRetry(url, options, true);
 }
 
 function setLoadingText(msg) {

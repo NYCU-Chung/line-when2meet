@@ -16,6 +16,26 @@ const LiffHelper = {
     return true;
   },
 
+  async recoverAuth(liffId) {
+    try {
+      // Re-init may refresh browser-side LIFF state on desktop/webview.
+      await liff.init({ liffId });
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: window.location.href });
+        return false;
+      }
+      this.profile = await liff.getProfile();
+      this.idToken = liff.getIDToken();
+      if (this.idToken) return true;
+
+      // Logged in but no id token: force re-login.
+      liff.login({ redirectUri: window.location.href });
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
   getProfile() { return this.profile; },
   getIdToken() { return this.idToken; },
 

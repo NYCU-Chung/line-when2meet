@@ -14,6 +14,10 @@ VERIFY_CACHE_TTL_SEC = 300
 VERIFY_CACHE_MAX_SIZE = 512
 
 
+class TokenServiceUnavailableError(Exception):
+    pass
+
+
 def _get_cached_verify_result(id_token):
     now = time.time()
     with _verify_cache_lock:
@@ -64,17 +68,26 @@ def verify_liff_token(id_token):
     if cached:
         return cached
 
-    resp = _line_verify_session.post(
-        "https://api.line.me/oauth2/v2.1/verify",
-        data={
-            "id_token": id_token,
-            "client_id": Config.LIFF_ID_SCHEDULE.split("-")[0],
-        },
-        timeout=(2, 4),
-    )
+    try:
+        resp = _line_verify_session.post(
+            "https://api.line.me/oauth2/v2.1/verify",
+            data={
+                "id_token": id_token,
+                "client_id": Config.LIFF_ID_SCHEDULE.split("-")[0],
+            },
+            timeout=(2, 4),
+        )
+    except requests.RequestException as e:
+        raise TokenServiceUnavailableError("line verify request failed") from e
+
     if resp.status_code != 200:
+        if resp.status_code >= 500 or resp.status_code == 429:
+            raise TokenServiceUnavailableError(f"line verify status={resp.status_code}")
         raise ValueError("invalid token")
-    data = resp.json()
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise TokenServiceUnavailableError("line verify bad json") from e
     sub = data.get("sub")
     if not sub:
         raise ValueError("invalid token")
@@ -110,8 +123,10 @@ def auth():
 
         try:
             user_id, display_name, picture_url = verify_liff_token(id_token)
-        except Exception:
+        except ValueError:
             return jsonify({"error": "invalid id_token"}), 401
+        except TokenServiceUnavailableError:
+            return jsonify({"error": "line verify unavailable"}), 503
 
         upsert_user(conn, user_id, display_name, picture_url)
         upsert_group_user(conn, int(group_id), user_id)
@@ -140,8 +155,10 @@ def get_schedule():
 
         try:
             user_id, display_name, picture_url = verify_liff_token(id_token)
-        except Exception:
+        except ValueError:
             return jsonify({"error": "invalid token"}), 401
+        except TokenServiceUnavailableError:
+            return jsonify({"error": "line verify unavailable"}), 503
 
         upsert_user(conn, user_id, display_name, picture_url)
         upsert_group_user(conn, int(group_id), user_id)
@@ -176,8 +193,10 @@ def post_schedule():
 
         try:
             user_id, display_name, picture_url = verify_liff_token(id_token)
-        except Exception:
+        except ValueError:
             return jsonify({"error": "invalid token"}), 401
+        except TokenServiceUnavailableError:
+            return jsonify({"error": "line verify unavailable"}), 503
 
         # Single transaction to reduce sqlite lock probability.
         try:
