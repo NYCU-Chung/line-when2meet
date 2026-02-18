@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>空閒時間填寫</title>
+  <link rel="stylesheet" href="/static/css/schedule.css" />
+  <script src="https://static.line-scdn.net/liff/edge/versions/2.22.3/sdk.js"></script>
+</head>
+<body>
+
+<!-- Loading 畫面 -->
+<div id="loading" class="loading">
+  <div class="spinner"></div>
+  <div>登入中...</div>
+</div>
+
+<!-- 主內容（登入後顯示）-->
+<div id="main-content" style="display:none">
+
+  <!-- 頂部 Header -->
+  <header class="app-header">
+    <h1>空閒時間填寫</h1>
+    <div class="user-info">👤 <span id="user-name"></span></div>
+    <!-- 星期指示列 -->
+    <div class="day-indicator" id="day-indicator"></div>
+  </header>
+
+  <div class="content-padding">
+    <!-- 圖例 -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot bg-free"></div> 有空</div>
+      <div class="legend-item"><div class="legend-dot bg-class"></div> 上課</div>
+      <div class="legend-item"><div class="legend-dot bg-busy"></div> 忙碌</div>
+      <div class="legend-item"><div class="legend-dot bg-other"></div> 其他</div>
+    </div>
+
+    <!-- Day Carousel -->
+    <div class="carousel-wrapper">
+      <div class="day-carousel" id="day-carousel"></div>
+    </div>
+  </div>
+
+  <!-- 固定儲存按鈕 -->
+  <div class="save-bar">
+    <button class="save-btn" id="save-btn">儲存</button>
+  </div>
+</div>
+
+<!-- 格子編輯 Modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-title" id="modal-title"></div>
+
+    <div class="status-options">
+      <div class="status-option" data-status="0">✅ 有空</div>
+      <div class="status-option" data-status="1">📚 上課</div>
+      <div class="status-option" data-status="2">🔴 忙碌</div>
+      <div class="status-option" data-status="3">⚪ 其他</div>
+    </div>
+
+    <div class="note-label">備註（選填，例如課名或活動）</div>
+    <textarea class="note-input" id="modal-note" placeholder="最多 100 字" maxlength="100"></textarea>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btn-cancel">取消</button>
+      <button class="btn-confirm" id="btn-confirm">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 提示 -->
+<div class="toast" id="toast"></div>
+
+<!-- 注入 Flask 模板變數到 JS -->
+<script>
+  const LIFF_ID   = "{{ liff_id }}";
+  const DAY_CODES = {{ day_codes | tojson }};
+  const DAY_NAMES = {{ day_names | tojson }};
+  const SLOT_CODES = {{ slot_codes | tojson }};
+  const SLOT_TIMES = {{ slot_times | tojson }};
+</script>
+<script src="/static/js/liff_init.js"></script>
+<script src="/static/js/schedule_editor.js"></script>
+</body>
+</html>

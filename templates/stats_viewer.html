@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>空閒時間統計</title>
+  <link rel="stylesheet" href="/static/css/stats.css" />
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading" class="loading">
+  <div class="spinner"></div>
+  <div>載入統計中...</div>
+</div>
+
+<!-- 主內容 -->
+<div id="main-content" style="display:none">
+
+  <header class="app-header">
+    <h1>空閒時間統計</h1>
+    <div class="stat-summary" id="stat-summary">載入中...</div>
+    <div class="day-indicator" id="day-indicator"></div>
+  </header>
+
+  <!-- 圖例 -->
+  <div class="legend">
+    <span>有空人數：</span>
+    <div class="heatmap-scale">
+      <span>0</span>
+      <div class="scale-bar"></div>
+      <span>全員</span>
+    </div>
+    <span style="color:#aaa">（點格子看詳情）</span>
+  </div>
+
+  <!-- Day Carousel -->
+  <div class="carousel-wrapper">
+    <div class="day-carousel" id="day-carousel"></div>
+  </div>
+
+</div>
+
+<!-- 詳細面板背景遮罩 -->
+<div class="panel-overlay" id="panel-overlay"></div>
+
+<!-- 詳細資訊面板 -->
+<div class="detail-panel" id="detail-panel">
+  <div class="detail-panel-header">
+    <div>
+      <div id="panel-title"></div>
+      <div style="font-size:12px;color:#888;margin-top:2px" id="panel-free-count"></div>
+    </div>
+    <button class="panel-close" id="panel-close">✕</button>
+  </div>
+  <div class="detail-list" id="detail-list"></div>
+</div>
+
+<!-- 注入模板變數 -->
+<script>
+  const DAY_CODES  = {{ day_codes | tojson }};
+  const DAY_NAMES  = {{ day_names | tojson }};
+  const SLOT_CODES = {{ slot_codes | tojson }};
+  const SLOT_TIMES = {{ slot_times | tojson }};
+</script>
+<script src="/static/js/stats_viewer.js"></script>
+</body>
+</html>
