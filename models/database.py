@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     line_user_id TEXT NOT NULL,
     group_id     INTEGER NOT NULL,
     day_code     TEXT NOT NULL CHECK(day_code IN ('M','T','W','R','F','S','U')),
-    slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d')),
+    slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d','e','f')),
     status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4,5)),
     note         TEXT DEFAULT '',
     updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -51,13 +51,13 @@ CREATE INDEX IF NOT EXISTS idx_group_users_group ON group_users(group_id);
 
 DAY_CODES = ['M', 'T', 'W', 'R', 'F', 'S', 'U']
 DAY_NAMES = {'M': '星期一', 'T': '星期二', 'W': '星期三', 'R': '星期四', 'F': '星期五', 'S': '星期六', 'U': '星期日'}
-SLOT_CODES = ['y', 'z', '1', '2', '3', '4', 'n', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd']
+SLOT_CODES = ['y', 'z', '1', '2', '3', '4', 'n', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
 SLOT_TIMES = {
     'y': '6:00~6:50',   'z': '7:00~7:50',
     '1': '8:00~8:50',   '2': '9:00~9:50',   '3': '10:10~11:00', '4': '11:10~12:00',
     'n': '12:20~13:10', '5': '13:20~14:10', '6': '14:20~15:10', '7': '15:30~16:20',
     '8': '16:30~17:20', '9': '17:30~18:20', 'a': '18:30~19:20', 'b': '19:30~20:20',
-    'c': '20:30~21:20', 'd': '21:30~22:20',
+    'c': '20:30~21:20', 'd': '21:30~22:20', 'e': '22:30~23:20', 'f': '23:30~24:00',
 }
 STATUS_LABELS = {0: '有空', 1: '上課', 2: '忙碌', 3: '其他', 4: '睡覺', 5: '回家'}
 
@@ -73,19 +73,22 @@ def get_db():
     return conn
 
 
-def _schedules_supports_home(conn):
+def _schedules_supports_current_schema(conn):
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='schedules'"
     ).fetchone()
     if not row or not row["sql"]:
         return True
     sql = (row["sql"] or "").replace(" ", "")
-    return "CHECK(statusIN(0,1,2,3,4,5))" in sql
+    has_status_check = "CHECK(statusIN(0,1,2,3,4,5))" in sql
+    has_slot_e = "'e'" in sql
+    has_slot_f = "'f'" in sql
+    return has_status_check and has_slot_e and has_slot_f
 
 
-def _migrate_schedules_add_home(conn):
+def _migrate_schedules_to_current_schema(conn):
     """
-    SQLite 無法直接修改 CHECK constraint；用重建 table 的方式加入 status=4/5（睡覺/回家）。
+    SQLite 無法直接修改 CHECK constraint；用重建 table 的方式更新 schedules schema。
     """
     conn.execute("ALTER TABLE schedules RENAME TO schedules_old")
     conn.execute(
@@ -94,7 +97,7 @@ def _migrate_schedules_add_home(conn):
             line_user_id TEXT NOT NULL,
             group_id     INTEGER NOT NULL,
             day_code     TEXT NOT NULL CHECK(day_code IN ('M','T','W','R','F','S','U')),
-            slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d')),
+            slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d','e','f')),
             status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4,5)),
             note         TEXT DEFAULT '',
             updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -122,10 +125,10 @@ def init_db():
     conn = get_db()
     try:
         conn.executescript(SCHEMA_SQL)
-        # Migration: allow status=4/5 (sleep/home) on existing DBs.
-        if not _schedules_supports_home(conn):
+        # Migration: ensure latest schedules schema (status set + slot range).
+        if not _schedules_supports_current_schema(conn):
             conn.execute("BEGIN")
-            _migrate_schedules_add_home(conn)
+            _migrate_schedules_to_current_schema(conn)
         conn.commit()
     finally:
         conn.close()

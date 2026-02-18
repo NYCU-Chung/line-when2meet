@@ -95,6 +95,7 @@ function setBrushMode(statusOrNull) {
   }
 
   document.body.classList.toggle("paint-armed", brushArmed);
+  if (!brushArmed) stopAutoScrollLoop();
 }
 
 // ── 初始化 ──────────────────────────────────────────────────────────────────
@@ -371,6 +372,52 @@ function initBrushBar() {
 let pointerState = null;
 let suppressClickUntil = 0;
 const PAINT_START_DISTANCE_PX = 16;
+const AUTO_SCROLL_EDGE_PX = 88;
+const AUTO_SCROLL_MAX_STEP_PX = 5;
+let autoScrollRaf = null;
+
+function stopAutoScrollLoop() {
+  if (!autoScrollRaf) return;
+  cancelAnimationFrame(autoScrollRaf);
+  autoScrollRaf = null;
+}
+
+function startAutoScrollLoop() {
+  if (autoScrollRaf) return;
+  autoScrollRaf = requestAnimationFrame(autoScrollTick);
+}
+
+function autoScrollTick() {
+  autoScrollRaf = null;
+  if (!brushArmed || !pointerState || !pointerState.isPainting) return;
+
+  const viewportH = window.innerHeight || document.documentElement.clientHeight;
+  const y = pointerState.lastY;
+  const x = pointerState.lastX;
+
+  let delta = 0;
+  if (y > viewportH - AUTO_SCROLL_EDGE_PX) {
+    const ratio = (y - (viewportH - AUTO_SCROLL_EDGE_PX)) / AUTO_SCROLL_EDGE_PX;
+    delta = Math.max(1, Math.round(ratio * AUTO_SCROLL_MAX_STEP_PX));
+  } else if (y < AUTO_SCROLL_EDGE_PX) {
+    const ratio = (AUTO_SCROLL_EDGE_PX - y) / AUTO_SCROLL_EDGE_PX;
+    delta = -Math.max(1, Math.round(ratio * AUTO_SCROLL_MAX_STEP_PX));
+  }
+
+  if (delta !== 0) {
+    const maxScrollY = Math.max(0, document.documentElement.scrollHeight - viewportH);
+    const prevY = window.scrollY;
+    const nextY = Math.min(maxScrollY, Math.max(0, prevY + delta));
+    if (nextY !== prevY) {
+      window.scrollTo({ top: nextY, behavior: "auto" });
+      const el = document.elementFromPoint(x, y);
+      const cell = el && el.closest ? el.closest(".slot-cell") : null;
+      if (cell) paintCell(cell);
+    }
+  }
+
+  autoScrollRaf = requestAnimationFrame(autoScrollTick);
+}
 
 function initPaintHandlers() {
   const carousel = document.getElementById("day-carousel");
@@ -385,6 +432,8 @@ function initPaintHandlers() {
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
       startCell: cell,
       isPainting: false,
       visited: new Set(),
@@ -395,6 +444,8 @@ function initPaintHandlers() {
 
   carousel.addEventListener("pointermove", (e) => {
     if (!brushArmed || !pointerState || pointerState.pointerId !== e.pointerId) return;
+    pointerState.lastX = e.clientX;
+    pointerState.lastY = e.clientY;
 
     const dx = e.clientX - pointerState.startX;
     const dy = e.clientY - pointerState.startY;
@@ -403,6 +454,7 @@ function initPaintHandlers() {
     if (!pointerState.isPainting && dist2 > (PAINT_START_DISTANCE_PX * PAINT_START_DISTANCE_PX)) {
       pointerState.isPainting = true;
       paintCell(pointerState.startCell);
+      startAutoScrollLoop();
     }
 
     if (!pointerState.isPainting) return;
@@ -415,6 +467,7 @@ function initPaintHandlers() {
 
   const end = (e) => {
     if (!pointerState || pointerState.pointerId !== e.pointerId) return;
+    stopAutoScrollLoop();
 
     let usedBrush = pointerState.isPainting;
     if (!pointerState.isPainting && pointerState.startCell) {
