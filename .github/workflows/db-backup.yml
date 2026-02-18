@@ -13,9 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
       - name: Create backup
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -26,7 +23,15 @@ jobs:
             exit 1
           fi
 
-          bash scripts/backup_db.sh
+          # Use PostgreSQL 17 client to match Railway server major version.
+          docker run --rm \
+            -e DATABASE_URL \
+            -e BACKUP_DIR=/workspace/backups \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            postgres:17 \
+            bash scripts/backup_db.sh
+
           BACKUP_FILE="$(ls -1t backups/* | head -n 1)"
           echo "BACKUP_FILE=${BACKUP_FILE}" >> "${GITHUB_ENV}"
 
