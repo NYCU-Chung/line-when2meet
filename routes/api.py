@@ -1,10 +1,42 @@
 import requests
+import time
+from threading import Lock
 from flask import Blueprint, request, jsonify
 from config import Config
 from models.database import get_db, upsert_user, upsert_group_user, get_or_create_group
 from services.schedule_service import get_user_schedule, save_user_schedule, get_group_stats
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
+_line_verify_session = requests.Session()
+_verify_cache_lock = Lock()
+_verify_cache = {}
+VERIFY_CACHE_TTL_SEC = 300
+VERIFY_CACHE_MAX_SIZE = 512
+
+
+def _get_cached_verify_result(id_token):
+    now = time.time()
+    with _verify_cache_lock:
+        item = _verify_cache.get(id_token)
+        if not item:
+            return None
+        expires_at, payload = item
+        if expires_at <= now:
+            _verify_cache.pop(id_token, None)
+            return None
+        return payload
+
+
+def _set_cached_verify_result(id_token, payload):
+    now = time.time()
+    with _verify_cache_lock:
+        if len(_verify_cache) >= VERIFY_CACHE_MAX_SIZE:
+            expired = [k for k, (exp, _) in _verify_cache.items() if exp <= now]
+            for k in expired[:128]:
+                _verify_cache.pop(k, None)
+            if len(_verify_cache) >= VERIFY_CACHE_MAX_SIZE:
+                _verify_cache.pop(next(iter(_verify_cache)))
+        _verify_cache[id_token] = (now + VERIFY_CACHE_TTL_SEC, payload)
 
 def resolve_group_id(conn, group_value):
     """
@@ -28,18 +60,28 @@ def resolve_group_id(conn, group_value):
 
 def verify_liff_token(id_token):
     """驗證 LIFF ID Token，回傳 (line_user_id, display_name, picture_url) 或 raise ValueError。"""
-    resp = requests.post(
+    cached = _get_cached_verify_result(id_token)
+    if cached:
+        return cached
+
+    resp = _line_verify_session.post(
         "https://api.line.me/oauth2/v2.1/verify",
         data={
             "id_token": id_token,
             "client_id": Config.LIFF_ID_SCHEDULE.split("-")[0],
         },
-        timeout=5,
+        timeout=(2, 4),
     )
     if resp.status_code != 200:
         raise ValueError("invalid token")
     data = resp.json()
-    return data.get("sub"), data.get("name", ""), data.get("picture", "")
+    sub = data.get("sub")
+    if not sub:
+        raise ValueError("invalid token")
+
+    result = (sub, data.get("name", ""), data.get("picture", ""))
+    _set_cached_verify_result(id_token, result)
+    return result
 
 
 def get_token_from_request():

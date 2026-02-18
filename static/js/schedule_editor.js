@@ -121,13 +121,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
 
-  // 向後端 auth（建立/更新 user 記錄）
-  await fetch("/api/auth", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: LiffHelper.getIdToken(), group: groupId }),
-  });
-
+  // /api/schedule 會自動 upsert user/group，因此不需額外打一支 /api/auth。
   await loadSchedule();
 
   renderCarousel();
