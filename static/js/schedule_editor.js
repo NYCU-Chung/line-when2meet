@@ -26,12 +26,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   groupId = LiffHelper.getParam("group");
 
   if (!groupId) {
-    showError("缺少群組資訊，請從 LINE 點擊連結進入。");
+    // LIFF may rewrite query into `liff.state`; LiffHelper.getParam() handles that.
+    showError("缺少群組資訊，請從 LINE 群組內點擊卡片連結進入。");
     return;
   }
 
   try {
-    const ok = await LiffHelper.init(window.LIFF_ID);
+    const ok = await LiffHelper.init(LIFF_ID);
     if (!ok) return; // 等待 LIFF 登入跳轉
   } catch (e) {
     showError("LIFF 初始化失敗，請關閉並重新開啟。");
