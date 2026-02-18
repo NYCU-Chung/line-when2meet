@@ -1,5 +1,4 @@
-import sqlite3
-from models.database import DAY_CODES, SLOT_CODES, STATUS_LABELS
+from models.database import DAY_CODES, SLOT_CODES, STATUS_LABELS, is_missing_table_error
 
 
 def get_user_schedule(conn, line_user_id, group_id):
@@ -78,7 +77,7 @@ def get_group_stats(conn, group_id):
         }
       }
     """
-    # 有參與的使用者（以打開過 LIFF/auth 為準）；若舊 DB 尚未有 group_users table，退回舊邏輯。
+    # 有參與的使用者（以打開過 LIFF/auth 為準）；若 group_users 不存在則退回舊邏輯。
     try:
         user_rows = conn.execute(
             """SELECT gu.line_user_id, u.display_name, u.picture_url
@@ -88,7 +87,9 @@ def get_group_stats(conn, group_id):
                ORDER BY gu.last_seen_at DESC""",
             (group_id,),
         ).fetchall()
-    except sqlite3.OperationalError:
+    except Exception as e:
+        if not is_missing_table_error(e):
+            raise
         user_rows = conn.execute(
             """SELECT DISTINCT s.line_user_id, u.display_name, u.picture_url
                FROM schedules s

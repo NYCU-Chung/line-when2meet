@@ -2,7 +2,19 @@ import os
 import sqlite3
 from config import Config
 
-SCHEMA_SQL = """
+try:
+    import psycopg
+    from psycopg import errors as pg_errors
+    from psycopg.rows import dict_row
+except Exception:  # pragma: no cover - fallback when psycopg isn't installed locally
+    psycopg = None
+    pg_errors = None
+    dict_row = None
+
+
+DB_BACKEND = "postgres" if (Config.DATABASE_URL or "").strip() else "sqlite"
+
+SQLITE_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS groups (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     line_group_id TEXT NOT NULL UNIQUE,
@@ -35,10 +47,9 @@ CREATE TABLE IF NOT EXISTS schedules (
 CREATE INDEX IF NOT EXISTS idx_schedules_group ON schedules(group_id);
 CREATE INDEX IF NOT EXISTS idx_schedules_user_group ON schedules(line_user_id, group_id);
 
--- 參與者：打開 LIFF/完成 auth 的使用者（用來讓統計的 total_users 更準確）
 CREATE TABLE IF NOT EXISTS group_users (
-    group_id     INTEGER NOT NULL,
-    line_user_id TEXT NOT NULL,
+    group_id      INTEGER NOT NULL,
+    line_user_id  TEXT NOT NULL,
     first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (group_id, line_user_id),
@@ -49,31 +60,125 @@ CREATE TABLE IF NOT EXISTS group_users (
 CREATE INDEX IF NOT EXISTS idx_group_users_group ON group_users(group_id);
 """
 
-DAY_CODES = ['M', 'T', 'W', 'R', 'F', 'S', 'U']
-DAY_NAMES = {'M': '星期一', 'T': '星期二', 'W': '星期三', 'R': '星期四', 'F': '星期五', 'S': '星期六', 'U': '星期日'}
-SLOT_CODES = ['y', 'z', '1', '2', '3', '4', 'n', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+POSTGRES_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS groups (
+    id            BIGSERIAL PRIMARY KEY,
+    line_group_id TEXT NOT NULL UNIQUE,
+    name          TEXT,
+    created_at    TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id           BIGSERIAL PRIMARY KEY,
+    line_user_id TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    picture_url  TEXT,
+    last_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS schedules (
+    id           BIGSERIAL PRIMARY KEY,
+    line_user_id TEXT NOT NULL REFERENCES users(line_user_id),
+    group_id     BIGINT NOT NULL REFERENCES groups(id),
+    day_code     TEXT NOT NULL CHECK(day_code IN ('M','T','W','R','F','S','U')),
+    slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d','e','f')),
+    status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4,5)),
+    note         TEXT DEFAULT '',
+    updated_at   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(line_user_id, group_id, day_code, slot_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedules_group ON schedules(group_id);
+CREATE INDEX IF NOT EXISTS idx_schedules_user_group ON schedules(line_user_id, group_id);
+
+CREATE TABLE IF NOT EXISTS group_users (
+    group_id      BIGINT NOT NULL REFERENCES groups(id),
+    line_user_id  TEXT NOT NULL REFERENCES users(line_user_id),
+    first_seen_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at  TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, line_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_users_group ON group_users(group_id);
+"""
+
+DAY_CODES = ["M", "T", "W", "R", "F", "S", "U"]
+DAY_NAMES = {"M": "星期一", "T": "星期二", "W": "星期三", "R": "星期四", "F": "星期五", "S": "星期六", "U": "星期日"}
+SLOT_CODES = ["y", "z", "1", "2", "3", "4", "n", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"]
 SLOT_TIMES = {
-    'y': '6:00~6:50',   'z': '7:00~7:50',
-    '1': '8:00~8:50',   '2': '9:00~9:50',   '3': '10:10~11:00', '4': '11:10~12:00',
-    'n': '12:20~13:10', '5': '13:20~14:10', '6': '14:20~15:10', '7': '15:30~16:20',
-    '8': '16:30~17:20', '9': '17:30~18:20', 'a': '18:30~19:20', 'b': '19:30~20:20',
-    'c': '20:30~21:20', 'd': '21:30~22:20', 'e': '22:30~23:20', 'f': '23:30~24:00',
+    "y": "6:00~6:50", "z": "7:00~7:50",
+    "1": "8:00~8:50", "2": "9:00~9:50", "3": "10:10~11:00", "4": "11:10~12:00",
+    "n": "12:20~13:10", "5": "13:20~14:10", "6": "14:20~15:10", "7": "15:30~16:20",
+    "8": "16:30~17:20", "9": "17:30~18:20", "a": "18:30~19:20", "b": "19:30~20:20",
+    "c": "20:30~21:20", "d": "21:30~22:20", "e": "22:30~23:20", "f": "23:30~24:00",
 }
-STATUS_LABELS = {0: '有空', 1: '上課', 2: '忙碌', 3: '其他', 4: '睡覺', 5: '回家'}
+STATUS_LABELS = {0: "有空", 1: "上課", 2: "忙碌", 3: "其他", 4: "睡覺", 5: "回家"}
 
 
-def get_db():
-    db_path = Config.DATABASE_PATH
-    # Increase timeout to reduce "database is locked" errors on sqlite under WSGI.
-    conn = sqlite3.connect(db_path, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA busy_timeout=5000")
-    return conn
+def is_postgres():
+    return DB_BACKEND == "postgres"
 
 
-def _schedules_supports_current_schema(conn):
+def is_missing_table_error(exc):
+    if isinstance(exc, sqlite3.OperationalError):
+        return "no such table" in str(exc).lower()
+    if pg_errors and isinstance(exc, pg_errors.UndefinedTable):
+        return True
+    sqlstate = getattr(exc, "sqlstate", None)
+    return sqlstate == "42P01"
+
+
+def _convert_qmark_placeholders(query):
+    # Current SQL only uses "?" as placeholders. Convert for psycopg (%s style).
+    return query.replace("?", "%s")
+
+
+def _split_sql_statements(script):
+    return [stmt.strip() for stmt in script.split(";") if stmt.strip()]
+
+
+class DBConnection:
+    """
+    Thin wrapper to keep one query style (`?`) for both sqlite and postgres.
+    """
+
+    def __init__(self, conn, backend):
+        self._conn = conn
+        self.backend = backend
+
+    def _adapt_query(self, query):
+        if self.backend != "postgres":
+            return query
+        stripped = query.lstrip().upper()
+        if stripped.startswith("BEGIN IMMEDIATE"):
+            return "BEGIN"
+        return _convert_qmark_placeholders(query)
+
+    def execute(self, query, params=()):
+        if params is None:
+            params = ()
+        return self._conn.execute(self._adapt_query(query), params)
+
+    def executescript(self, script):
+        if self.backend == "sqlite":
+            return self._conn.executescript(script)
+        for stmt in _split_sql_statements(script):
+            self._conn.execute(stmt)
+
+    def commit(self):
+        return self._conn.commit()
+
+    def rollback(self):
+        return self._conn.rollback()
+
+    def close(self):
+        return self._conn.close()
+
+    def __getattr__(self, item):
+        return getattr(self._conn, item)
+
+
+def _sqlite_schedules_supports_current_schema(conn):
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='schedules'"
     ).fetchone()
@@ -86,10 +191,7 @@ def _schedules_supports_current_schema(conn):
     return has_status_check and has_slot_e and has_slot_f
 
 
-def _migrate_schedules_to_current_schema(conn):
-    """
-    SQLite 無法直接修改 CHECK constraint；用重建 table 的方式更新 schedules schema。
-    """
+def _sqlite_migrate_schedules_to_current_schema(conn):
     conn.execute("ALTER TABLE schedules RENAME TO schedules_old")
     conn.execute(
         """CREATE TABLE schedules (
@@ -118,17 +220,41 @@ def _migrate_schedules_to_current_schema(conn):
     )
 
 
+def get_db():
+    if is_postgres():
+        if psycopg is None:
+            raise RuntimeError("psycopg is required when DATABASE_URL is set")
+        raw = psycopg.connect(
+            Config.DATABASE_URL,
+            autocommit=False,
+            row_factory=dict_row,
+        )
+        return DBConnection(raw, "postgres")
+
+    db_path = Config.DATABASE_PATH
+    raw = sqlite3.connect(db_path, timeout=10)
+    raw.row_factory = sqlite3.Row
+    raw.execute("PRAGMA journal_mode=WAL")
+    raw.execute("PRAGMA foreign_keys=ON")
+    raw.execute("PRAGMA busy_timeout=5000")
+    return DBConnection(raw, "sqlite")
+
+
 def init_db():
-    db_dir = os.path.dirname(Config.DATABASE_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
+    if not is_postgres():
+        db_dir = os.path.dirname(Config.DATABASE_PATH)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
     conn = get_db()
     try:
-        conn.executescript(SCHEMA_SQL)
-        # Migration: ensure latest schedules schema (status set + slot range).
-        if not _schedules_supports_current_schema(conn):
+        schema_sql = POSTGRES_SCHEMA_SQL if is_postgres() else SQLITE_SCHEMA_SQL
+        conn.executescript(schema_sql)
+
+        if not is_postgres() and not _sqlite_schedules_supports_current_schema(conn):
             conn.execute("BEGIN")
-            _migrate_schedules_to_current_schema(conn)
+            _sqlite_migrate_schedules_to_current_schema(conn)
+
         conn.commit()
     finally:
         conn.close()
@@ -141,11 +267,18 @@ def get_or_create_group(conn, line_group_id):
     ).fetchone()
     if row:
         return row["id"]
-    cursor = conn.execute(
-        "INSERT INTO groups (line_group_id) VALUES (?)", (line_group_id,)
+
+    conn.execute(
+        """INSERT INTO groups (line_group_id)
+           VALUES (?)
+           ON CONFLICT(line_group_id) DO NOTHING""",
+        (line_group_id,),
     )
     conn.commit()
-    return cursor.lastrowid
+    row = conn.execute(
+        "SELECT id FROM groups WHERE line_group_id = ?", (line_group_id,)
+    ).fetchone()
+    return row["id"]
 
 
 def upsert_user(conn, line_user_id, display_name, picture_url=None):
@@ -158,7 +291,7 @@ def upsert_user(conn, line_user_id, display_name, picture_url=None):
                last_seen_at = CURRENT_TIMESTAMP""",
         (line_user_id, display_name, picture_url),
     )
-    # Commit should be controlled by the caller to reduce SQLite write-lock churn.
+    # Commit should be controlled by the caller to reduce write-lock churn.
 
 
 def upsert_group_user(conn, group_id, line_user_id):
@@ -172,4 +305,4 @@ def upsert_group_user(conn, group_id, line_user_id):
                last_seen_at = CURRENT_TIMESTAMP""",
         (group_id, line_user_id),
     )
-    # Commit should be controlled by the caller to reduce SQLite write-lock churn.
+    # Commit should be controlled by the caller to reduce write-lock churn.

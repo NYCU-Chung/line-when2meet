@@ -44,31 +44,27 @@ body {
   border-radius: 12px;
   border: 1px solid #e8ece9;
   box-shadow: 0 4px 12px rgba(20, 33, 28, 0.06);
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "title state"
+    "buttons buttons";
   gap: 8px;
 }
 
 .brushbar-title {
+  grid-area: title;
   font-size: 12px;
   font-weight: 700;
   color: #666;
-  flex-shrink: 0;
-  min-width: 30px;
   letter-spacing: 0.2px;
 }
 
 .brushbar-buttons {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
+  grid-area: buttons;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  flex: 1;
-}
-
-.brushbar-buttons::-webkit-scrollbar {
-  display: none;
 }
 
 .brush-btn {
@@ -82,7 +78,8 @@ body {
   line-height: 1;
   cursor: pointer;
   user-select: none;
-  white-space: nowrap;
+  width: 100%;
+  text-align: center;
   transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
 
@@ -99,10 +96,11 @@ body {
 }
 
 .brushbar-state {
+  grid-area: state;
+  justify-self: end;
   font-size: 12px;
   color: #8d9390;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .brushbar-state.is-armed {

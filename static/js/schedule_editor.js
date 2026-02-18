@@ -88,7 +88,7 @@ function setBrushMode(statusOrNull) {
       state.textContent = "已關閉";
       state.classList.remove("is-armed");
     } else {
-      const modeName = brushStatus === 0 ? "清除" : (STATUS_CONFIG[brushStatus]?.label || "筆刷");
+      const modeName = brushStatus === 0 ? "橡皮擦" : (STATUS_CONFIG[brushStatus]?.label || "筆刷");
       state.textContent = `${modeName}模式`;
       state.classList.add("is-armed");
     }
