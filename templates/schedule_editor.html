@@ -37,18 +37,18 @@
 	      <div class="legend-item"><div class="legend-dot bg-other"></div> 其他</div>
 	    </div>
 
-    <!-- 筆刷（拖曳可一次選多格） -->
+    <!-- 筆刷（拖曳一次後自動關閉） -->
     <div class="brushbar">
       <div class="brushbar-title">筆刷</div>
-	      <div class="brushbar-buttons" id="brushbar">
-	        <button type="button" class="brush-btn is-active" data-status="1">📚 上課</button>
-	        <button type="button" class="brush-btn" data-status="2">🔴 忙碌</button>
-	        <button type="button" class="brush-btn" data-status="4">😴 睡覺</button>
-	        <button type="button" class="brush-btn" data-status="5">🏠 回家</button>
-	        <button type="button" class="brush-btn" data-status="3">⚪ 其他</button>
-	        <button type="button" class="brush-btn brush-btn-erase" data-status="0">✖ 清除（回到有空）</button>
-	      </div>
-      <div class="brushbar-hint">提示：在格子上拖曳可一次塗多格；點一下可編輯備註。</div>
+      <div class="brushbar-buttons" id="brushbar">
+        <button type="button" class="brush-btn" data-status="1">📚 上課</button>
+        <button type="button" class="brush-btn" data-status="2">🔴 忙碌</button>
+        <button type="button" class="brush-btn" data-status="4">😴 睡覺</button>
+        <button type="button" class="brush-btn" data-status="5">🏠 回家</button>
+        <button type="button" class="brush-btn" data-status="3">⚪ 其他</button>
+        <button type="button" class="brush-btn brush-btn-erase" data-status="0">✖ 清除</button>
+      </div>
+      <div class="brushbar-state" id="brush-state">已關閉</div>
     </div>
 
     <!-- Day Carousel -->

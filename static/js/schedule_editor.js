@@ -1,10 +1,10 @@
 /**
  * 課表填寫頁邏輯
- * - LIFF 登入 → 載入個人排程 → 支援拖曳一次塗多格 → 儲存
+ * - LIFF 登入 → 載入個人排程 → 支援筆刷拖曳（一次性）→ 儲存
  *
  * 狀態說明：
- * - 未選取：不儲存（前端顯示白/灰）
- * - 0~3：明確選取，全部都會儲存（包含 0=有空）
+ * - 空白格 = 預設有空（不儲存）
+ * - 1~5 = 非空閒狀態（會儲存）
  */
 
 // 預設「有空」不儲存、不顯示 icon；只儲存 1~5（非空閒狀態）
@@ -28,7 +28,8 @@ let dirty = false;
 let saving = false;
 
 // 筆刷狀態：0 代表清除（回到預設有空）
-let brushStatus = 1;
+let brushStatus = null;
+let brushArmed = false;
 
 function keyOf(day, slot) {
   return `${day}-${slot}`;
@@ -60,6 +61,40 @@ function refreshSaveButton() {
   if (saving) btn.textContent = "儲存中...";
   else if (dirty) btn.textContent = "儲存";
   else btn.textContent = "已儲存";
+}
+
+function setBrushMode(statusOrNull) {
+  const bar = document.getElementById("brushbar");
+  const state = document.getElementById("brush-state");
+
+  const parsed = Number(statusOrNull);
+  if (statusOrNull === null || statusOrNull === undefined || Number.isNaN(parsed)) {
+    brushArmed = false;
+    brushStatus = null;
+  } else {
+    brushArmed = true;
+    brushStatus = parsed;
+  }
+
+  if (bar) {
+    bar.querySelectorAll(".brush-btn").forEach((btn) => {
+      const st = Number(btn.dataset.status);
+      btn.classList.toggle("is-active", brushArmed && st === brushStatus);
+    });
+  }
+
+  if (state) {
+    if (!brushArmed) {
+      state.textContent = "已關閉";
+      state.classList.remove("is-armed");
+    } else {
+      const modeName = brushStatus === 0 ? "清除" : (STATUS_CONFIG[brushStatus]?.label || "筆刷");
+      state.textContent = `${modeName}模式`;
+      state.classList.add("is-armed");
+    }
+  }
+
+  document.body.classList.toggle("paint-armed", brushArmed);
 }
 
 // ── 初始化 ──────────────────────────────────────────────────────────────────
@@ -98,6 +133,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initDayIndicator();
   initModal();
   initBrushBar();
+  setBrushMode(null);
   initPaintHandlers();
   initSaveButton();
 
@@ -319,10 +355,14 @@ function initBrushBar() {
     if (!btn) return;
 
     const raw = btn.dataset.status;
-    brushStatus = Number(raw);
+    const selectedStatus = Number(raw);
+    if (Number.isNaN(selectedStatus)) return;
 
-    bar.querySelectorAll(".brush-btn").forEach((b) => b.classList.remove("is-active"));
-    btn.classList.add("is-active");
+    if (brushArmed && brushStatus === selectedStatus) {
+      setBrushMode(null);
+      return;
+    }
+    setBrushMode(selectedStatus);
   });
 }
 
@@ -337,6 +377,7 @@ function initPaintHandlers() {
   if (!carousel) return;
 
   carousel.addEventListener("pointerdown", (e) => {
+    if (!brushArmed) return;
     const cell = e.target.closest(".slot-cell");
     if (!cell) return;
 
@@ -353,7 +394,7 @@ function initPaintHandlers() {
   });
 
   carousel.addEventListener("pointermove", (e) => {
-    if (!pointerState || pointerState.pointerId !== e.pointerId) return;
+    if (!brushArmed || !pointerState || pointerState.pointerId !== e.pointerId) return;
 
     const dx = e.clientX - pointerState.startX;
     const dy = e.clientY - pointerState.startY;
@@ -375,9 +416,18 @@ function initPaintHandlers() {
   const end = (e) => {
     if (!pointerState || pointerState.pointerId !== e.pointerId) return;
 
-    const wasPainting = pointerState.isPainting;
+    let usedBrush = pointerState.isPainting;
+    if (!pointerState.isPainting && pointerState.startCell) {
+      paintCell(pointerState.startCell);
+      usedBrush = true;
+    }
+
     pointerState = null;
-    if (wasPainting) suppressClickUntil = Date.now() + 450;
+    if (usedBrush) {
+      suppressClickUntil = Date.now() + 450;
+      // One-shot brush: after one drag/tap paint, return to normal scroll mode.
+      setBrushMode(null);
+    }
   };
 
   carousel.addEventListener("pointerup", end);
@@ -385,7 +435,7 @@ function initPaintHandlers() {
 }
 
 function paintCell(cell) {
-  if (!pointerState) return;
+  if (!pointerState || !brushArmed) return;
   const day = cell.dataset.day;
   const slot = cell.dataset.slot;
   if (!day || !slot) return;
