@@ -1,0 +1,43 @@
+name: Database Backup
+
+on:
+  schedule:
+    # Every day at 02:30 Asia/Taipei (18:30 UTC)
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Create backup
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_DIR: backups
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "Missing GitHub secret: DATABASE_URL"
+            exit 1
+          fi
+
+          bash scripts/backup_db.sh
+          BACKUP_FILE="$(ls -1t backups/* | head -n 1)"
+          echo "BACKUP_FILE=${BACKUP_FILE}" >> "${GITHUB_ENV}"
+
+      - name: Verify backup file
+        run: |
+          test -s "${BACKUP_FILE}"
+          ls -lh "${BACKUP_FILE}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30

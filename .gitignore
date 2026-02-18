@@ -4,6 +4,7 @@
 # Database
 data/
 *.db
+backups/
 
 # Python
 __pycache__/
