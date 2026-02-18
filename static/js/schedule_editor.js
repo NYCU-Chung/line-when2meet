@@ -682,12 +682,12 @@ function showError(msg) {
     </div>`;
 }
 
-async function fetchWithAuthRetry(url, options = {}, retried = false) {
-  const cred = getAuthCredential();
+async function fetchWithAuthRetry(url, options = {}, retried = false, preferAccessToken = false) {
+  const cred = getAuthCredential(preferAccessToken);
   if (!cred && !retried) {
     const recovered = await LiffHelper.recoverAuth(LIFF_ID);
     if (recovered) {
-      return fetchWithAuthRetry(url, options, true);
+      return fetchWithAuthRetry(url, options, true, true);
     }
   }
 
@@ -708,19 +708,60 @@ async function fetchWithAuthRetry(url, options = {}, retried = false) {
     return resp;
   }
 
-  return fetchWithAuthRetry(url, options, true);
+  // Retry once and prefer access_token on the second attempt.
+  return fetchWithAuthRetry(url, options, true, true);
 }
 
-function getAuthCredential() {
+function getAuthCredential(preferAccessToken = false) {
+  const accessToken = (LiffHelper.getAccessToken() || "").trim();
   const idToken = (LiffHelper.getIdToken() || "").trim();
-  if (idToken) {
+
+  if (preferAccessToken && accessToken) {
+    return { token: accessToken, type: "access_token" };
+  }
+
+  if (idToken && !isLikelyExpiredIdToken(idToken)) {
     return { token: idToken, type: "id_token" };
   }
-  const accessToken = (LiffHelper.getAccessToken() || "").trim();
+
   if (accessToken) {
     return { token: accessToken, type: "access_token" };
   }
+
+  // Last fallback: still try id_token if access_token is unavailable.
+  if (idToken) {
+    return { token: idToken, type: "id_token" };
+  }
+
   return null;
+}
+
+function isLikelyExpiredIdToken(token, skewSec = 20) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) return false;
+  const payload = decodeBase64Url(parts[1]);
+  if (!payload) return false;
+  try {
+    const data = JSON.parse(payload);
+    const exp = Number(data && data.exp);
+    if (!Number.isFinite(exp)) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return exp <= (nowSec + skewSec);
+  } catch {
+    return false;
+  }
+}
+
+function decodeBase64Url(input) {
+  if (!input) return "";
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padLen = (4 - (normalized.length % 4)) % 4;
+  const padded = normalized + "=".repeat(padLen);
+  try {
+    return atob(padded);
+  } catch {
+    return "";
+  }
 }
 
 function setLoadingText(msg) {
