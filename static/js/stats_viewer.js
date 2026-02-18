@@ -133,12 +133,13 @@ function createSlotRow(day, slot, slotInfo, total) {
   return row;
 }
 
-/** 回傳較柔和的綠色熱力圖顏色（白灰 → 溫和綠） */
+/** 回傳較明亮的熱力圖顏色（淡藍灰 → 亮綠） */
 function heatColor(ratio) {
-  if (ratio <= 0) return "#F6F8F7";
-  const hue = 150;
-  const sat = Math.round(18 + ratio * 22);  // 18% ~ 40%
-  const light = Math.round(97 - ratio * 27); // 97% ~ 70%
+  if (ratio <= 0) return "#F4F7F5";
+  const r = Math.min(1, Math.max(0, ratio));
+  const hue = Math.round(188 - r * 62); // 188 ~ 126
+  const sat = Math.round(42 + r * 26);  // 42% ~ 68%
+  const light = Math.round(97 - r * 40); // 97% ~ 57%
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -166,9 +167,9 @@ function showDetail(day, slot, slotInfo, total) {
   list.innerHTML = "";
 
   if (total === 0) {
-    list.innerHTML = `<div style="color:#aaa;text-align:center;padding:20px">尚無人參與</div>`;
+    list.innerHTML = `<div class="detail-empty-msg">尚無人參與</div>`;
   } else if (details.length === 0) {
-    list.innerHTML = `<div style="color:#2F6F58;text-align:center;padding:18px 0;font-weight:700">✅ 此時段所有人都有空</div>`;
+    list.innerHTML = `<div class="detail-allfree-msg">✅ 此時段所有人都有空</div>`;
   } else {
     const sorted = [...details].sort((a, b) => Number(a.status) - Number(b.status));
     sorted.forEach((item) => {
@@ -199,8 +200,8 @@ function hideDetail() {
 
 function showError(msg) {
   document.getElementById("loading").innerHTML = `
-    <div style="text-align:center;padding:40px 20px;color:#e53935">
-      <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+    <div class="loading-error">
+      <div class="loading-error-icon">⚠️</div>
       <div>${msg}</div>
     </div>`;
 }
@@ -208,4 +209,3 @@ function showError(msg) {
 function escHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-
