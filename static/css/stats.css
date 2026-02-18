@@ -473,3 +473,115 @@ body {
     padding: 2px 7px;
   }
 }
+
+@media (min-width: 960px) {
+  body {
+    padding: 20px 24px 36px;
+  }
+
+  #main-content {
+    max-width: 1160px;
+    margin: 0 auto;
+  }
+
+  .app-header {
+    top: 10px;
+    border-radius: 16px;
+    border: 1px solid #e6eee9;
+    padding: 16px 20px 14px;
+    box-shadow: 0 10px 24px rgba(28, 50, 40, 0.09);
+  }
+
+  .app-header h1 {
+    font-size: 22px;
+  }
+
+  .stat-summary {
+    font-size: 14px;
+  }
+
+  .day-tabs {
+    gap: 8px;
+  }
+
+  .day-tab {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .legend {
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  .carousel-wrapper {
+    padding: 16px 0 10px;
+  }
+
+  .day-carousel {
+    max-width: none;
+  }
+
+  .day-card {
+    border-radius: 16px;
+  }
+
+  .day-card-header {
+    font-size: 17px;
+    padding: 14px 18px;
+  }
+
+  .slot-list {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .slot-row {
+    gap: 12px;
+  }
+
+  .slot-time-label {
+    width: 94px;
+    font-size: 12px;
+  }
+
+  .slot-time-label strong {
+    font-size: 13px;
+  }
+
+  .slot-cell {
+    min-height: 44px;
+    border-radius: 14px;
+  }
+
+  .slot-count {
+    font-size: 13px;
+    min-width: 48px;
+    padding: 3px 9px;
+  }
+
+  .detail-panel {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    width: min(700px, 92vw);
+    max-height: 78vh;
+    border-radius: 18px;
+    box-shadow: 0 18px 44px rgba(20, 33, 28, 0.22);
+    transform: translate(-50%, calc(-50% + 24px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .detail-panel.show {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .panel-overlay {
+    background: rgba(17, 27, 21, 0.36);
+  }
+}

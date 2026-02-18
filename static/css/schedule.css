@@ -445,5 +445,128 @@ body {
   margin-bottom: 12px;
 }
 
+@media (min-width: 960px) {
+  body {
+    padding: 20px 24px 120px;
+  }
+
+  #main-content {
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+
+  .app-header {
+    top: 10px;
+    border-radius: 16px;
+    border: 1px solid #e6eee9;
+    padding: 16px 18px 14px;
+    box-shadow: 0 8px 22px rgba(29, 50, 40, 0.09);
+  }
+
+  .app-header h1 {
+    font-size: 22px;
+  }
+
+  .user-info {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .brushbar {
+    grid-template-columns: auto auto minmax(480px, 1fr);
+    grid-template-areas: "title state buttons";
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .brushbar-title {
+    margin-right: 2px;
+  }
+
+  .brushbar-state {
+    justify-self: start;
+  }
+
+  .brushbar-buttons {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .carousel-wrapper {
+    overflow: visible;
+    padding: 18px 0 12px;
+  }
+
+  .day-carousel {
+    gap: 14px;
+    scroll-padding-left: 8px;
+    padding: 2px 8px 10px;
+  }
+
+  .day-card {
+    flex: 0 0 min(390px, 31vw);
+    margin: 0;
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(28, 50, 40, 0.09);
+  }
+
+  .slot-time-label {
+    width: 88px;
+    font-size: 12px;
+  }
+
+  .slot-time-label strong {
+    font-size: 14px;
+  }
+
+  .slot-cell {
+    min-height: 50px;
+  }
+
+  .content-padding {
+    padding-bottom: 130px;
+  }
+
+  .save-bar {
+    left: 50%;
+    right: auto;
+    bottom: 16px;
+    width: min(1140px, calc(100vw - 80px));
+    transform: translateX(-50%);
+    border: 1px solid #e6ede9;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(24, 42, 34, 0.14);
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  .save-btn {
+    width: min(320px, 100%);
+    margin-left: auto;
+    display: block;
+    border-radius: 10px;
+  }
+
+  .toast {
+    bottom: 100px;
+  }
+
+  .modal-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .modal {
+    width: min(640px, 92vw);
+    border-radius: 18px;
+    padding: 22px 22px 24px;
+    transform: translateY(20px) scale(0.98);
+  }
+
+  .modal-overlay.show .modal {
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* bottom padding for fixed save bar */
 .content-padding { padding-bottom: 80px; }
