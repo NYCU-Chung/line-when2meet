@@ -199,11 +199,30 @@ function createSlotRow(day, slot, slotInfo, total) {
 
   const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
   const ratio = total > 0 ? freeCount / total : 0;
-  cell.style.background = heatColor(ratio);
+  cell.classList.toggle("is-full", ratio >= 0.999);
+
+  const meter = document.createElement("div");
+  meter.className = "slot-meter";
+
+  const meterTrack = document.createElement("div");
+  meterTrack.className = "slot-meter-track";
+
+  const meterFill = document.createElement("div");
+  meterFill.className = "slot-meter-fill";
+  meterFill.style.width = `${Math.max(0, Math.min(100, ratio * 100)).toFixed(1)}%`;
+  meterTrack.appendChild(meterFill);
+
+  const meterPattern = document.createElement("div");
+  meterPattern.className = "slot-meter-pattern";
+  meterTrack.appendChild(meterPattern);
+
+  meter.appendChild(meterTrack);
+  cell.appendChild(meter);
 
   const countEl = document.createElement("div");
   countEl.className = `slot-count${ratio >= 0.86 ? " all-free" : ""}`;
   countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
+  countEl.title = `有空 ${freeCount} / ${total}`;
   cell.appendChild(countEl);
 
   cell.addEventListener("click", () => showDetail(day, slot, slotInfo, total));
@@ -211,16 +230,6 @@ function createSlotRow(day, slot, slotInfo, total) {
   row.appendChild(timeLabel);
   row.appendChild(cell);
   return row;
-}
-
-/** 回傳偏柔和的熱力圖顏色（灰藍綠 → 中綠） */
-function heatColor(ratio) {
-  if (ratio <= 0) return "#F3F6F4";
-  const r = Math.min(1, Math.max(0, ratio));
-  const hue = Math.round(172 - r * 28); // 172 ~ 144
-  const sat = Math.round(26 + r * 22);  // 26% ~ 48%
-  const light = Math.round(95 - r * 30); // 95% ~ 65%
-  return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
 function initDetailPanel() {
