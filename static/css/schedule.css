@@ -36,35 +36,6 @@ body {
   margin-bottom: 8px;
 }
 
-/* ── 星期指示列 ── */
-.day-indicator {
-  display: flex;
-  gap: 4px;
-  padding-bottom: 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.day-indicator::-webkit-scrollbar { display: none; }
-
-.day-dot {
-  flex: 1;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-  color: #aaa;
-  padding: 4px 0;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.day-dot.active {
-  color: #4CAF50;
-  border-bottom-color: #4CAF50;
-  font-weight: 700;
-}
-
 /* ── 筆刷 ── */
 .brushbar {
   margin-top: 2px;

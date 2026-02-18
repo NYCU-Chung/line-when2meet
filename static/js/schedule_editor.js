@@ -314,6 +314,7 @@ function updateSlotCell(day, slot, statusOrNull, note) {
 
 function initDayIndicator() {
   const indicator = document.getElementById("day-indicator");
+  if (!indicator) return;
   indicator.innerHTML = "";
 
   DAY_CODES.forEach((day, idx) => {
@@ -326,7 +327,9 @@ function initDayIndicator() {
 }
 
 function updateDayIndicator() {
-  document.querySelectorAll(".day-dot").forEach((dot, idx) => {
+  const dots = document.querySelectorAll(".day-dot");
+  if (!dots.length) return;
+  dots.forEach((dot, idx) => {
     dot.classList.toggle("active", idx === currentDayIndex);
   });
 }
@@ -371,7 +374,6 @@ function initBrushBar() {
 
 let pointerState = null;
 let suppressClickUntil = 0;
-const PAINT_START_DISTANCE_PX = 16;
 const AUTO_SCROLL_EDGE_PX = 88;
 const AUTO_SCROLL_MAX_STEP_PX = 5;
 let autoScrollRaf = null;
@@ -410,9 +412,9 @@ function autoScrollTick() {
     const nextY = Math.min(maxScrollY, Math.max(0, prevY + delta));
     if (nextY !== prevY) {
       window.scrollTo({ top: nextY, behavior: "auto" });
-      const el = document.elementFromPoint(x, y);
-      const cell = el && el.closest ? el.closest(".slot-cell") : null;
-      if (cell) paintCell(cell);
+      // Sample around finger point so cells passing during auto-scroll are painted.
+      const offsets = delta > 0 ? [0, -18, -36] : [0, 18, 36];
+      offsets.forEach((off) => paintFromPoint(x, y + off));
     }
   }
 
@@ -435,45 +437,29 @@ function initPaintHandlers() {
       lastX: e.clientX,
       lastY: e.clientY,
       startCell: cell,
-      isPainting: false,
+      isPainting: true,
       visited: new Set(),
     };
 
+    paintCell(cell);
+    startAutoScrollLoop();
+    e.preventDefault();
     try { cell.setPointerCapture(e.pointerId); } catch { /* ignore */ }
-  });
+  }, { passive: false });
 
   carousel.addEventListener("pointermove", (e) => {
     if (!brushArmed || !pointerState || pointerState.pointerId !== e.pointerId) return;
     pointerState.lastX = e.clientX;
     pointerState.lastY = e.clientY;
-
-    const dx = e.clientX - pointerState.startX;
-    const dy = e.clientY - pointerState.startY;
-    const dist2 = dx * dx + dy * dy;
-
-    if (!pointerState.isPainting && dist2 > (PAINT_START_DISTANCE_PX * PAINT_START_DISTANCE_PX)) {
-      pointerState.isPainting = true;
-      paintCell(pointerState.startCell);
-      startAutoScrollLoop();
-    }
-
-    if (!pointerState.isPainting) return;
-
     e.preventDefault();
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const cell = el && el.closest ? el.closest(".slot-cell") : null;
-    if (cell) paintCell(cell);
+    paintFromPoint(e.clientX, e.clientY);
   }, { passive: false });
 
   const end = (e) => {
     if (!pointerState || pointerState.pointerId !== e.pointerId) return;
     stopAutoScrollLoop();
 
-    let usedBrush = pointerState.isPainting;
-    if (!pointerState.isPainting && pointerState.startCell) {
-      paintCell(pointerState.startCell);
-      usedBrush = true;
-    }
+    const usedBrush = pointerState.visited.size > 0;
 
     pointerState = null;
     if (usedBrush) {
@@ -485,6 +471,12 @@ function initPaintHandlers() {
 
   carousel.addEventListener("pointerup", end);
   carousel.addEventListener("pointercancel", end);
+}
+
+function paintFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  const cell = el && el.closest ? el.closest(".slot-cell") : null;
+  if (cell) paintCell(cell);
 }
 
 function paintCell(cell) {
