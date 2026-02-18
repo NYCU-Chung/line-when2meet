@@ -7,12 +7,13 @@
  * - 0~3：明確選取，全部都會儲存（包含 0=有空）
  */
 
-// 預設「有空」不儲存、不顯示 icon；只儲存 1~4（非空閒狀態）
+// 預設「有空」不儲存、不顯示 icon；只儲存 1~5（非空閒狀態）
 const STATUS_CONFIG = {
   1: { label: "上課", icon: "📚", cls: "status-1" },
   2: { label: "忙碌", icon: "🔴", cls: "status-2" },
   3: { label: "其他", icon: "⚪", cls: "status-3" },
   4: { label: "睡覺", icon: "😴", cls: "status-4" },
+  5: { label: "回家", icon: "🏠", cls: "status-5" },
 };
 
 // 伺服器回傳的 {day-slot: {status, note}}（只包含已選取的格子）
@@ -88,7 +89,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await fetch("/api/auth", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id_token: LiffHelper.getIdToken(), group_id: parseInt(groupId, 10) }),
+    body: JSON.stringify({ id_token: LiffHelper.getIdToken(), group: groupId }),
   });
 
   await loadSchedule();
@@ -107,11 +108,19 @@ window.addEventListener("DOMContentLoaded", async () => {
 // ── 載入排程 ─────────────────────────────────────────────────────────────────
 
 async function loadSchedule() {
-  const resp = await fetch(`/api/schedule?group_id=${encodeURIComponent(groupId)}`, {
+  const resp = await fetch(`/api/schedule?group=${encodeURIComponent(groupId)}`, {
     headers: { Authorization: `Bearer ${LiffHelper.getIdToken()}` },
   });
   if (!resp.ok) {
-    showToast("⚠️ 載入失敗，請稍後重試");
+    let msg = `⚠️ 載入失敗（${resp.status}）`;
+    try {
+      const data = await resp.json();
+      if (data && data.error) msg = `⚠️ ${data.error}`;
+      if (resp.status === 401) msg = "⚠️ 登入失效，請回到 LINE 重新開啟";
+      if (resp.status === 410) msg = "⚠️ 連結已過期，請回到群組輸入 when2meet 取得新連結";
+      if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
+    } catch { /* ignore */ }
+    showToast(msg);
     return;
   }
   const data = await resp.json();
@@ -514,7 +523,7 @@ async function saveSchedule() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${LiffHelper.getIdToken()}`,
       },
-      body: JSON.stringify({ group_id: parseInt(groupId, 10), schedules }),
+      body: JSON.stringify({ group: groupId, schedules }),
     });
 
     if (resp.ok) {

@@ -250,6 +250,7 @@ body {
 .slot-cell.status-1 { background: #E3F2FD; }   /* 上課 - 淡藍 */
 .slot-cell.status-2 { background: #FFEBEE; }   /* 忙碌 - 淡紅 */
 .slot-cell.status-4 { background: #FFF8E1; }   /* 睡覺 - 淡黃 */
+.slot-cell.status-5 { background: #E0F7FA; }   /* 回家 - 淡青 */
 .slot-cell.status-3 { background: #F5F5F5; }   /* 其他 - 淡灰 */
 .slot-cell.status-empty { background: #FAFAFA; } /* 有空（預設空白） */
 
@@ -359,6 +360,7 @@ body {
 .status-option[data-status="1"].selected { border-color: #2196F3; background: #E3F2FD; }
 .status-option[data-status="2"].selected { border-color: #F44336; background: #FFEBEE; }
 .status-option[data-status="4"].selected { border-color: #FFB300; background: #FFF8E1; }
+.status-option[data-status="5"].selected { border-color: #0097A7; background: #E0F7FA; }
 .status-option[data-status="3"].selected { border-color: #9E9E9E; background: #F5F5F5; }
 
 .note-label {
@@ -438,6 +440,7 @@ body {
 .bg-busy  { background: #F44336; }
 .bg-other { background: #9E9E9E; }
 .bg-sleep { background: #FFB300; }
+.bg-home  { background: #0097A7; }
 .bg-empty { background: #FAFAFA; border: 1px solid #e0e0e0; }
 
 /* ── Loading ── */

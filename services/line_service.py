@@ -12,10 +12,11 @@ import json
 line_configuration = Configuration(access_token=Config.LINE_CHANNEL_ACCESS_TOKEN)
 
 
-def send_when2meet_flex(reply_token, group_db_id):
+def send_when2meet_flex(reply_token, line_group_id):
     """回傳含填寫/統計按鈕的 Flex Message。"""
-    schedule_url = f"https://liff.line.me/{Config.LIFF_ID_SCHEDULE}?group={group_db_id}"
-    stats_url = f"{Config.BASE_URL}/stats?group={group_db_id}"
+    # Use LINE groupId (stable) in URLs to avoid breaking links when DB is reset.
+    schedule_url = f"https://liff.line.me/{Config.LIFF_ID_SCHEDULE}?group={line_group_id}"
+    stats_url = f"{Config.BASE_URL}/stats?group={line_group_id}"
 
     flex_content = {
         "type": "bubble",

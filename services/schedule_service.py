@@ -23,7 +23,7 @@ def save_user_schedule(conn, line_user_id, group_id, schedules):
 
     規則（預設有空）：
     - status=0 代表有空（預設值）：不儲存，直接刪除記錄（回到預設）
-    - status=1~4 代表非空閒（上課/忙碌/其他/睡覺）：會儲存
+    - status=1~5 代表非空閒（上課/忙碌/其他/睡覺/回家）：會儲存
     """
     for s in schedules:
         day = s.get("day")
@@ -47,7 +47,7 @@ def save_user_schedule(conn, line_user_id, group_id, schedules):
                 "DELETE FROM schedules WHERE line_user_id=? AND group_id=? AND day_code=? AND slot_code=?",
                 (line_user_id, group_id, day, slot),
             )
-        elif status in (1, 2, 3, 4):
+        elif status in (1, 2, 3, 4, 5):
             conn.execute(
                 """INSERT INTO schedules (line_user_id, group_id, day_code, slot_code, status, note, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -57,7 +57,7 @@ def save_user_schedule(conn, line_user_id, group_id, schedules):
                        updated_at = CURRENT_TIMESTAMP""",
                 (line_user_id, group_id, day, slot, status, note),
             )
-    conn.commit()
+    # Commit should be controlled by the caller to reduce SQLite write-lock churn.
 
 
 def get_group_stats(conn, group_id):
@@ -109,7 +109,7 @@ def get_group_stats(conn, group_id):
 
     total_users = len(user_rows)
 
-    # 所有非空閒記錄（status=1~4）
+    # 所有非空閒記錄（status=1~5）
     schedule_rows = conn.execute(
         """SELECT s.line_user_id, s.day_code, s.slot_code, s.status, s.note,
                   u.display_name

@@ -8,12 +8,14 @@ const STATUS_LABELS = {
   2: "忙碌",
   3: "其他",
   4: "睡覺",
+  5: "回家",
 };
 const STATUS_CSS = {
   1: "status-class",
   2: "status-busy",
   3: "status-other",
   4: "status-sleep",
+  5: "status-home",
 };
 
 let statsData = null;

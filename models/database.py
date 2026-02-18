@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS schedules (
     group_id     INTEGER NOT NULL,
     day_code     TEXT NOT NULL CHECK(day_code IN ('M','T','W','R','F','S','U')),
     slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d')),
-    status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4)),
+    status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4,5)),
     note         TEXT DEFAULT '',
     updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (line_user_id) REFERENCES users(line_user_id),
@@ -59,7 +59,7 @@ SLOT_TIMES = {
     '8': '16:30~17:20', '9': '17:30~18:20', 'a': '18:30~19:20', 'b': '19:30~20:20',
     'c': '20:30~21:20', 'd': '21:30~22:20',
 }
-STATUS_LABELS = {0: '有空', 1: '上課', 2: '忙碌', 3: '其他', 4: '睡覺'}
+STATUS_LABELS = {0: '有空', 1: '上課', 2: '忙碌', 3: '其他', 4: '睡覺', 5: '回家'}
 
 
 def get_db():
@@ -73,19 +73,19 @@ def get_db():
     return conn
 
 
-def _schedules_supports_sleep(conn):
+def _schedules_supports_home(conn):
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='schedules'"
     ).fetchone()
     if not row or not row["sql"]:
         return True
     sql = (row["sql"] or "").replace(" ", "")
-    return "CHECK(statusIN(0,1,2,3,4))" in sql
+    return "CHECK(statusIN(0,1,2,3,4,5))" in sql
 
 
-def _migrate_schedules_add_sleep(conn):
+def _migrate_schedules_add_home(conn):
     """
-    SQLite 無法直接修改 CHECK constraint；用重建 table 的方式加入 status=4（睡覺）。
+    SQLite 無法直接修改 CHECK constraint；用重建 table 的方式加入 status=4/5（睡覺/回家）。
     """
     conn.execute("ALTER TABLE schedules RENAME TO schedules_old")
     conn.execute(
@@ -95,7 +95,7 @@ def _migrate_schedules_add_sleep(conn):
             group_id     INTEGER NOT NULL,
             day_code     TEXT NOT NULL CHECK(day_code IN ('M','T','W','R','F','S','U')),
             slot_code    TEXT NOT NULL CHECK(slot_code IN ('y','z','1','2','3','4','n','5','6','7','8','9','a','b','c','d')),
-            status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4)),
+            status       INTEGER NOT NULL DEFAULT 0 CHECK(status IN (0,1,2,3,4,5)),
             note         TEXT DEFAULT '',
             updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (line_user_id) REFERENCES users(line_user_id),
@@ -122,10 +122,10 @@ def init_db():
     conn = get_db()
     try:
         conn.executescript(SCHEMA_SQL)
-        # Migration: allow status=4 (sleep) on existing DBs.
-        if not _schedules_supports_sleep(conn):
+        # Migration: allow status=4/5 (sleep/home) on existing DBs.
+        if not _schedules_supports_home(conn):
             conn.execute("BEGIN")
-            _migrate_schedules_add_sleep(conn)
+            _migrate_schedules_add_home(conn)
         conn.commit()
     finally:
         conn.close()
@@ -155,7 +155,7 @@ def upsert_user(conn, line_user_id, display_name, picture_url=None):
                last_seen_at = CURRENT_TIMESTAMP""",
         (line_user_id, display_name, picture_url),
     )
-    conn.commit()
+    # Commit should be controlled by the caller to reduce SQLite write-lock churn.
 
 
 def upsert_group_user(conn, group_id, line_user_id):
@@ -169,4 +169,4 @@ def upsert_group_user(conn, group_id, line_user_id):
                last_seen_at = CURRENT_TIMESTAMP""",
         (group_id, line_user_id),
     )
-    conn.commit()
+    # Commit should be controlled by the caller to reduce SQLite write-lock churn.

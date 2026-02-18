@@ -282,6 +282,7 @@ body {
 .status-class { background: #E3F2FD; color: #1565C0; }
 .status-busy  { background: #FFEBEE; color: #C62828; }
 .status-sleep { background: #FFF8E1; color: #8D6E00; }
+.status-home  { background: #E0F7FA; color: #006064; }
 .status-other { background: #F5F5F5; color: #616161; }
 
 /* ── 面板背景遮罩 ── */

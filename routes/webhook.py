@@ -3,7 +3,6 @@ from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 from config import Config
-from models.database import get_db, get_or_create_group
 from services.line_service import send_when2meet_flex
 
 webhook_bp = Blueprint("webhook", __name__)
@@ -34,10 +33,4 @@ def handle_message(event):
         return
 
     line_group_id = event.source.group_id
-    conn = get_db()
-    try:
-        group_db_id = get_or_create_group(conn, line_group_id)
-    finally:
-        conn.close()
-
-    send_when2meet_flex(event.reply_token, group_db_id)
+    send_when2meet_flex(event.reply_token, line_group_id)
