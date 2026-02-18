@@ -24,6 +24,8 @@ let statsData = null;
 let groupId = null;
 let currentDayIndex = 0;
 let busyDelayTimer = null;
+let avatarResizeBound = false;
+let avatarResizeTimer = null;
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
@@ -111,6 +113,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initDayTabs();
   renderCurrentDay();
   initDetailPanel();
+  bindAvatarAutoLayout();
 });
 
 async function loadStats() {
@@ -184,6 +187,7 @@ function renderCurrentDay() {
   });
 
   container.appendChild(card);
+  requestAnimationFrame(() => refreshAvatarStrips(container));
 }
 
 function createSlotRow(day, slot, slotInfo, total) {
@@ -200,14 +204,17 @@ function createSlotRow(day, slot, slotInfo, total) {
   const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
   const allUsers = getAllUsers();
   const freeUsers = getFreeUsers(allUsers, slotInfo);
-  const avatarsWrap = buildFreeAvatarStrip(freeUsers, allUsers.length, freeCount);
+  const avatarsWrap = document.createElement("div");
+  avatarsWrap.className = "slot-avatars";
   cell.appendChild(avatarsWrap);
+  cell.__avatarData = { freeUsers, totalUsers: allUsers.length, freeCount };
 
   const countEl = document.createElement("div");
   countEl.className = `slot-count${allUsers.length > 0 && freeCount === allUsers.length ? " all-free" : ""}`;
   countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
   countEl.title = `有空 ${freeCount} / ${total}`;
   cell.appendChild(countEl);
+  renderAvatarStripForCell(cell);
 
   cell.addEventListener("click", () => showDetail(day, slot, slotInfo, total));
 
@@ -227,19 +234,29 @@ function getFreeUsers(allUsers, slotInfo) {
   return allUsers.filter((u) => !busySet.has(u.user_id));
 }
 
-function buildFreeAvatarStrip(freeUsers, totalUsers, freeCount) {
-  const wrap = document.createElement("div");
-  wrap.className = "slot-avatars";
+function renderAvatarStripForCell(cell) {
+  if (!cell || !cell.__avatarData) return;
+  const data = cell.__avatarData;
+  const wrap = cell.querySelector(".slot-avatars");
+  if (!wrap) return;
+
+  const maxVisible = calcAvatarVisibleCount(cell, data.freeUsers.length);
+  renderAvatarStrip(wrap, data.freeUsers, data.totalUsers, data.freeCount, maxVisible);
+}
+
+function renderAvatarStrip(wrap, freeUsers, totalUsers, freeCount, maxVisible) {
+  wrap.innerHTML = "";
 
   if (totalUsers <= 0) {
     const empty = document.createElement("span");
     empty.className = "slot-avatar-empty";
     empty.textContent = "尚無資料";
     wrap.appendChild(empty);
-    return wrap;
+    return;
   }
 
-  const displayUsers = freeUsers.slice(0, 6);
+  const visibleCount = Math.max(1, Math.min(freeUsers.length, maxVisible));
+  const displayUsers = freeUsers.slice(0, visibleCount);
   displayUsers.forEach((u) => wrap.appendChild(createAvatarEl(u)));
 
   const hidden = freeUsers.length - displayUsers.length;
@@ -257,8 +274,70 @@ function buildFreeAvatarStrip(freeUsers, totalUsers, freeCount) {
     none.textContent = "無人有空";
     wrap.appendChild(none);
   }
+}
 
-  return wrap;
+function calcAvatarVisibleCount(cell, freeUserCount) {
+  if (freeUserCount <= 0) return 0;
+  const countEl = cell.querySelector(".slot-count");
+  const rect = cell.getBoundingClientRect();
+  const cellWidth = rect.width || cell.clientWidth || 0;
+  if (!cellWidth) return freeUserCount;
+
+  const styles = window.getComputedStyle(cell);
+  const padLeft = parseFloat(styles.paddingLeft) || 0;
+  const padRight = parseFloat(styles.paddingRight) || 0;
+  const gap = parseFloat(styles.columnGap || styles.gap) || 8;
+  const countWidth = countEl ? (countEl.getBoundingClientRect().width || 44) : 44;
+  const available = cellWidth - padLeft - padRight - countWidth - gap;
+  if (available <= 0) return 1;
+
+  const avatarSize = getAvatarSize();
+  const overlap = getAvatarOverlap();
+  const step = Math.max(1, avatarSize - overlap);
+
+  const footprint = (n) => (n <= 0 ? 0 : (avatarSize + (n - 1) * step));
+  const moreWidth = getAvatarMoreWidth();
+
+  let visible = 1 + Math.floor(Math.max(0, available - avatarSize) / step);
+  visible = Math.max(1, Math.min(freeUserCount, visible));
+
+  if (visible < freeUserCount) {
+    while (visible > 1 && footprint(visible) + moreWidth > available) {
+      visible -= 1;
+    }
+  }
+  return visible;
+}
+
+function getAvatarSize() {
+  if (window.matchMedia("(max-width: 640px)").matches) return 20;
+  if (window.matchMedia("(min-width: 960px)").matches) return 24;
+  return 22;
+}
+
+function getAvatarOverlap() {
+  if (window.matchMedia("(max-width: 640px)").matches) return 5;
+  if (window.matchMedia("(min-width: 960px)").matches) return 7;
+  return 6;
+}
+
+function getAvatarMoreWidth() {
+  if (window.matchMedia("(max-width: 640px)").matches) return 30;
+  if (window.matchMedia("(min-width: 960px)").matches) return 36;
+  return 34;
+}
+
+function refreshAvatarStrips(root = document) {
+  root.querySelectorAll(".slot-cell").forEach((cell) => renderAvatarStripForCell(cell));
+}
+
+function bindAvatarAutoLayout() {
+  if (avatarResizeBound) return;
+  avatarResizeBound = true;
+  window.addEventListener("resize", () => {
+    clearTimeout(avatarResizeTimer);
+    avatarResizeTimer = setTimeout(() => refreshAvatarStrips(), 100);
+  });
 }
 
 function createAvatarEl(user) {
