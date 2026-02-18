@@ -50,6 +50,43 @@ body {
   margin-bottom: 8px;
 }
 
+.view-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.view-controls label {
+  font-size: 12px;
+  color: #62706b;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.view-controls select {
+  appearance: none;
+  border: 1px solid #d6e4dc;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f6faf7 100%);
+  color: #2f3f39;
+  border-radius: 10px;
+  height: 34px;
+  min-width: 168px;
+  padding: 0 34px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6f8179 50%),
+    linear-gradient(135deg, #6f8179 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 14px,
+    calc(100% - 9px) 14px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
 .day-tabs {
   display: flex;
   gap: 6px;
@@ -211,6 +248,75 @@ body {
 .slot-cell:active {
   filter: brightness(0.95);
   transform: scale(0.99);
+}
+
+.slot-cell.user-mode {
+  justify-content: flex-start;
+  padding: 0 12px;
+}
+
+.slot-personal {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot-personal-state {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 42, 30, 0.12);
+  background: rgba(255, 255, 255, 0.76);
+  color: #2f4a3d;
+}
+
+.slot-personal-note {
+  min-width: 0;
+  color: #4f6058;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-personal-note.empty {
+  color: #82908b;
+  font-weight: 500;
+}
+
+.slot-cell.user-status-0 {
+  background: #edf8ef;
+  border-color: #cfe2d4;
+}
+
+.slot-cell.user-status-1 {
+  background: #eef4ff;
+  border-color: #cfddfa;
+}
+
+.slot-cell.user-status-2 {
+  background: #fff0f2;
+  border-color: #f3d1d5;
+}
+
+.slot-cell.user-status-3 {
+  background: #f2f4f4;
+  border-color: #dfe4e2;
+}
+
+.slot-cell.user-status-4 {
+  background: #fff8e9;
+  border-color: #f0e0bc;
+}
+
+.slot-cell.user-status-5 {
+  background: #e9f8fb;
+  border-color: #cae8ef;
 }
 
 .slot-avatars {
@@ -544,6 +650,19 @@ body {
     padding: 0 8px;
   }
 
+  .slot-cell.user-mode {
+    padding: 0 9px;
+  }
+
+  .slot-personal-state {
+    font-size: 10px;
+    padding: 3px 7px;
+  }
+
+  .slot-personal-note {
+    font-size: 11px;
+  }
+
   .slot-avatar {
     width: 20px;
     height: 20px;
@@ -604,6 +723,16 @@ body {
     margin: 14px 0 0;
     padding: 12px 14px;
     border-radius: 14px;
+  }
+
+  .view-controls label {
+    font-size: 13px;
+  }
+
+  .view-controls select {
+    height: 36px;
+    min-width: 228px;
+    font-size: 14px;
   }
 
   .carousel-wrapper {

@@ -20,18 +20,24 @@
   <header class="app-header">
     <h1>空閒時間統計</h1>
     <div class="stat-summary" id="stat-summary">載入中...</div>
+    <div class="view-controls">
+      <label for="user-filter">檢視模式</label>
+      <select id="user-filter">
+        <option value="">全部人（統計）</option>
+      </select>
+    </div>
     <div class="day-tabs" id="day-tabs"></div>
   </header>
 
   <!-- 圖例 -->
   <div class="legend">
-    <span>有空頭像：</span>
-    <div class="heatmap-scale">
+    <span id="legend-title">有空頭像：</span>
+    <div class="heatmap-scale" id="legend-scale">
       <span>少</span>
       <div class="scale-bar"></div>
       <span>多</span>
     </div>
-    <span class="legend-hint">（點格子看詳情）</span>
+    <span class="legend-hint" id="legend-hint">（點格子看詳情）</span>
   </div>
 
   <!-- Day Carousel -->

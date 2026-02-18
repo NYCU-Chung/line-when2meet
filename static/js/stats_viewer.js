@@ -28,6 +28,8 @@ let currentDayIndex = 0;
 let busyDelayTimer = null;
 let avatarResizeBound = false;
 let avatarResizeTimer = null;
+let selectedUserId = "";
+let userSlotMap = new Map();
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
@@ -112,9 +114,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
 
+  buildUserSlotMap();
+  initUserFilter();
   initDayTabs();
   renderCurrentDay();
   initDetailPanel();
+  updateLegendHint();
   bindAvatarAutoLayout();
 });
 
@@ -158,6 +163,77 @@ function initDayTabs() {
   });
 }
 
+function initUserFilter() {
+  const select = document.getElementById("user-filter");
+  if (!select) return;
+
+  const users = getAllUsers().slice().sort((a, b) => {
+    return (a.display_name || "").localeCompare((b.display_name || ""), "zh-Hant");
+  });
+
+  select.innerHTML = '<option value="">全部人（統計）</option>';
+  users.forEach((u) => {
+    const opt = document.createElement("option");
+    opt.value = u.user_id;
+    opt.textContent = u.display_name || u.user_id;
+    select.appendChild(opt);
+  });
+
+  select.value = "";
+  select.addEventListener("change", async () => {
+    selectedUserId = normalizeGroupId(select.value);
+    updateLegendHint();
+    await runWithBusy("切換檢視中...", async () => {
+      await nextFrame();
+      renderCurrentDay();
+    });
+  });
+}
+
+function buildUserSlotMap() {
+  userSlotMap = new Map();
+  getAllUsers().forEach((u) => {
+    userSlotMap.set(u.user_id, {});
+  });
+
+  const slots = (statsData && statsData.slots) || {};
+  Object.entries(slots).forEach(([slotKey, slotInfo]) => {
+    const details = Array.isArray(slotInfo && slotInfo.details) ? slotInfo.details : [];
+    details.forEach((item) => {
+      if (!item || !item.user_id) return;
+      if (!userSlotMap.has(item.user_id)) {
+        userSlotMap.set(item.user_id, {});
+      }
+      userSlotMap.get(item.user_id)[slotKey] = {
+        status: Number(item.status),
+        note: (item.note || "").toString(),
+      };
+    });
+  });
+}
+
+function getSelectedUser() {
+  if (!selectedUserId) return null;
+  return getAllUsers().find((u) => u.user_id === selectedUserId) || null;
+}
+
+function updateLegendHint() {
+  const hint = document.getElementById("legend-hint");
+  const title = document.getElementById("legend-title");
+  const scale = document.getElementById("legend-scale");
+  if (!hint) return;
+  const selectedUser = getSelectedUser();
+  if (selectedUser) {
+    if (title) title.textContent = "個人狀態：";
+    if (scale) scale.style.display = "none";
+    hint.textContent = `（單人模式：${selectedUser.display_name || selectedUser.user_id}）`;
+  } else {
+    if (title) title.textContent = "有空頭像：";
+    if (scale) scale.style.display = "";
+    hint.textContent = "（點格子看詳情）";
+  }
+}
+
 function updateDayTabs() {
   document.querySelectorAll(".day-tab").forEach((el, idx) => {
     el.classList.toggle("active", idx === currentDayIndex);
@@ -170,6 +246,7 @@ function renderCurrentDay() {
 
   const total = statsData.total_users || 0;
   const day = DAY_CODES[currentDayIndex];
+  const selectedUser = getSelectedUser();
 
   const card = document.createElement("div");
   card.className = "day-card";
@@ -185,14 +262,16 @@ function renderCurrentDay() {
   SLOT_CODES.forEach((slot) => {
     const key = `${day}-${slot}`;
     const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
-    slotList.appendChild(createSlotRow(day, slot, slotInfo, total));
+    slotList.appendChild(createSlotRow(day, slot, slotInfo, total, selectedUser));
   });
 
   container.appendChild(card);
-  requestAnimationFrame(() => refreshAvatarStrips(container));
+  if (!selectedUser) {
+    requestAnimationFrame(() => refreshAvatarStrips(container));
+  }
 }
 
-function createSlotRow(day, slot, slotInfo, total) {
+function createSlotRow(day, slot, slotInfo, total, selectedUser) {
   const row = document.createElement("div");
   row.className = "slot-row";
 
@@ -203,20 +282,25 @@ function createSlotRow(day, slot, slotInfo, total) {
   const cell = document.createElement("div");
   cell.className = "slot-cell";
 
-  const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
-  const allUsers = getAllUsers();
-  const freeUsers = getFreeUsers(allUsers, slotInfo);
-  const avatarsWrap = document.createElement("div");
-  avatarsWrap.className = "slot-avatars";
-  cell.appendChild(avatarsWrap);
-  cell.__avatarData = { freeUsers, totalUsers: allUsers.length, freeCount };
+  if (selectedUser) {
+    const entry = getUserSlotEntry(selectedUser.user_id, day, slot);
+    renderPersonalSlotCell(cell, entry);
+  } else {
+    const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
+    const allUsers = getAllUsers();
+    const freeUsers = getFreeUsers(allUsers, slotInfo);
+    const avatarsWrap = document.createElement("div");
+    avatarsWrap.className = "slot-avatars";
+    cell.appendChild(avatarsWrap);
+    cell.__avatarData = { freeUsers, totalUsers: allUsers.length, freeCount };
 
-  const countEl = document.createElement("div");
-  countEl.className = `slot-count${allUsers.length > 0 && freeCount === allUsers.length ? " all-free" : ""}`;
-  countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
-  countEl.title = `有空 ${freeCount} / ${total}`;
-  cell.appendChild(countEl);
-  renderAvatarStripForCell(cell);
+    const countEl = document.createElement("div");
+    countEl.className = `slot-count${allUsers.length > 0 && freeCount === allUsers.length ? " all-free" : ""}`;
+    countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
+    countEl.title = `有空 ${freeCount} / ${total}`;
+    cell.appendChild(countEl);
+    renderAvatarStripForCell(cell);
+  }
 
   cell.addEventListener("click", () => showDetail(day, slot, slotInfo, total));
 
@@ -234,6 +318,46 @@ function getFreeUsers(allUsers, slotInfo) {
   const busyDetails = Array.isArray(slotInfo && slotInfo.details) ? slotInfo.details : [];
   const busySet = new Set(busyDetails.map((x) => x && x.user_id).filter(Boolean));
   return allUsers.filter((u) => !busySet.has(u.user_id));
+}
+
+function getUserSlotEntry(userId, day, slot) {
+  const slotKey = `${day}-${slot}`;
+  const entries = userSlotMap.get(userId) || {};
+  const raw = entries[slotKey];
+  if (!raw) {
+    return { status: 0, note: "" };
+  }
+
+  const n = Number(raw.status);
+  return {
+    status: Number.isFinite(n) ? n : 0,
+    note: (raw.note || "").toString(),
+  };
+}
+
+function renderPersonalSlotCell(cell, entry) {
+  const status = Number(entry.status);
+  cell.classList.add("user-mode", `user-status-${Number.isFinite(status) ? status : 0}`);
+
+  const wrap = document.createElement("div");
+  wrap.className = "slot-personal";
+
+  const state = document.createElement("span");
+  state.className = "slot-personal-state";
+  state.textContent = STATUS_LABELS[status] || STATUS_LABELS[3];
+
+  const note = document.createElement("span");
+  note.className = "slot-personal-note";
+  if (entry.note) {
+    note.textContent = entry.note;
+  } else {
+    note.classList.add("empty");
+    note.textContent = status === 0 ? "預設有空" : "未填備註";
+  }
+
+  wrap.appendChild(state);
+  wrap.appendChild(note);
+  cell.appendChild(wrap);
 }
 
 function renderAvatarStripForCell(cell) {
@@ -395,11 +519,18 @@ function showDetail(day, slot, slotInfo, total) {
   const busyUsers = [...details].sort((a, b) => Number(a.status) - Number(b.status));
 
   document.getElementById("panel-title").textContent = `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
-  document.getElementById("panel-free-count").textContent = (
+  let subline = (
     total > 0
       ? `有空 ${freeCount} / ${total} 人（非空閒 ${busyCount} 人）`
       : "尚無人參與"
   );
+  const selectedUser = getSelectedUser();
+  if (selectedUser) {
+    const entry = getUserSlotEntry(selectedUser.user_id, day, slot);
+    const label = STATUS_LABELS[entry.status] || STATUS_LABELS[3];
+    subline += `｜${selectedUser.display_name || selectedUser.user_id}：${label}`;
+  }
+  document.getElementById("panel-free-count").textContent = subline;
 
   const list = document.getElementById("detail-list");
   list.innerHTML = "";
@@ -481,7 +612,7 @@ function showError(msg) {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function setPageBusy(show, text = "載入中...") {
