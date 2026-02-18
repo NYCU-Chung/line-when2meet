@@ -198,30 +198,13 @@ function createSlotRow(day, slot, slotInfo, total) {
   cell.className = "slot-cell";
 
   const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
-  const ratio = total > 0 ? freeCount / total : 0;
-  cell.classList.toggle("is-full", ratio >= 0.999);
-  applyMeterPalette(cell, ratio);
-
-  const meter = document.createElement("div");
-  meter.className = "slot-meter";
-
-  const meterTrack = document.createElement("div");
-  meterTrack.className = "slot-meter-track";
-
-  const meterFill = document.createElement("div");
-  meterFill.className = "slot-meter-fill";
-  meterFill.style.width = `${Math.max(0, Math.min(100, ratio * 100)).toFixed(1)}%`;
-  meterTrack.appendChild(meterFill);
-
-  const meterPattern = document.createElement("div");
-  meterPattern.className = "slot-meter-pattern";
-  meterTrack.appendChild(meterPattern);
-
-  meter.appendChild(meterTrack);
-  cell.appendChild(meter);
+  const allUsers = getAllUsers();
+  const freeUsers = getFreeUsers(allUsers, slotInfo);
+  const avatarsWrap = buildFreeAvatarStrip(freeUsers, allUsers.length, freeCount);
+  cell.appendChild(avatarsWrap);
 
   const countEl = document.createElement("div");
-  countEl.className = `slot-count${ratio >= 0.86 ? " all-free" : ""}`;
+  countEl.className = `slot-count${allUsers.length > 0 && freeCount === allUsers.length ? " all-free" : ""}`;
   countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
   countEl.title = `有空 ${freeCount} / ${total}`;
   cell.appendChild(countEl);
@@ -233,48 +216,85 @@ function createSlotRow(day, slot, slotInfo, total) {
   return row;
 }
 
-function applyMeterPalette(cell, ratio) {
-  const r = clamp01(ratio);
-  if (r <= 0) {
-    cell.style.setProperty("--cell-border", "#cfdad4");
-    cell.style.setProperty("--meter-track-border", "#d5dfda");
-    cell.style.setProperty("--meter-track-bg-top", "#edf3ef");
-    cell.style.setProperty("--meter-track-bg-bottom", "#e3eae5");
-    cell.style.setProperty("--meter-start", "#d6dfd9");
-    cell.style.setProperty("--meter-end", "#c2cec6");
-    cell.style.setProperty("--pattern-accent", "rgba(94, 112, 101, 0.14)");
-    cell.style.setProperty("--count-bg", "#ffffff");
-    cell.style.setProperty("--count-border", "#d5e3da");
-    cell.style.setProperty("--count-color", "#60726a");
-    cell.style.setProperty("--count-full-bg", "#4f7d67");
-    cell.style.setProperty("--count-full-border", "#4f7d67");
-    return;
-  }
-
-  // Low ratio: warm orange/red, high ratio: cool green/teal.
-  const hue = Math.round(18 + r * 150); // 18 -> 168
-  const sat = Math.round(68 - r * 10); // 68 -> 58
-  const startLight = Math.round(74 - r * 12); // 74 -> 62
-  const endLight = Math.round(60 - r * 16); // 60 -> 44
-  const borderLight = Math.round(82 - r * 15); // 82 -> 67
-
-  cell.style.setProperty("--cell-border", `hsl(${hue}, 30%, ${borderLight}%)`);
-  cell.style.setProperty("--meter-track-border", `hsl(${hue}, 24%, ${Math.min(88, borderLight + 7)}%)`);
-  cell.style.setProperty("--meter-track-bg-top", `hsl(${hue}, 28%, 94%)`);
-  cell.style.setProperty("--meter-track-bg-bottom", `hsl(${hue}, 22%, 89%)`);
-  cell.style.setProperty("--meter-start", `hsl(${hue}, ${sat}%, ${startLight}%)`);
-  cell.style.setProperty("--meter-end", `hsl(${hue}, ${Math.max(42, sat - 8)}%, ${endLight}%)`);
-  cell.style.setProperty("--pattern-accent", `hsla(${hue}, 30%, 28%, 0.17)`);
-
-  cell.style.setProperty("--count-bg", `hsl(${hue}, ${Math.round(48 + r * 10)}%, ${Math.round(97 - r * 12)}%)`);
-  cell.style.setProperty("--count-border", `hsl(${hue}, ${Math.round(34 + r * 14)}%, ${Math.round(83 - r * 14)}%)`);
-  cell.style.setProperty("--count-color", `hsl(${hue}, ${Math.round(46 + r * 8)}%, ${Math.round(26 - r * 6)}%)`);
-  cell.style.setProperty("--count-full-bg", `hsl(${hue}, ${Math.round(58 + r * 8)}%, ${Math.round(44 - r * 8)}%)`);
-  cell.style.setProperty("--count-full-border", `hsl(${hue}, ${Math.round(58 + r * 8)}%, ${Math.round(44 - r * 8)}%)`);
+function getAllUsers() {
+  const users = Array.isArray(statsData && statsData.users) ? statsData.users : [];
+  return users.filter((u) => u && typeof u.user_id === "string" && u.user_id);
 }
 
-function clamp01(v) {
-  return Math.max(0, Math.min(1, Number(v) || 0));
+function getFreeUsers(allUsers, slotInfo) {
+  const busyDetails = Array.isArray(slotInfo && slotInfo.details) ? slotInfo.details : [];
+  const busySet = new Set(busyDetails.map((x) => x && x.user_id).filter(Boolean));
+  return allUsers.filter((u) => !busySet.has(u.user_id));
+}
+
+function buildFreeAvatarStrip(freeUsers, totalUsers, freeCount) {
+  const wrap = document.createElement("div");
+  wrap.className = "slot-avatars";
+
+  if (totalUsers <= 0) {
+    const empty = document.createElement("span");
+    empty.className = "slot-avatar-empty";
+    empty.textContent = "尚無資料";
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  const displayUsers = freeUsers.slice(0, 6);
+  displayUsers.forEach((u) => wrap.appendChild(createAvatarEl(u)));
+
+  const hidden = freeUsers.length - displayUsers.length;
+  if (hidden > 0) {
+    const more = document.createElement("span");
+    more.className = "slot-avatar slot-avatar-more";
+    more.textContent = `+${hidden}`;
+    more.title = `還有 ${hidden} 位有空`;
+    wrap.appendChild(more);
+  }
+
+  if (freeCount <= 0) {
+    const none = document.createElement("span");
+    none.className = "slot-avatar-empty";
+    none.textContent = "無人有空";
+    wrap.appendChild(none);
+  }
+
+  return wrap;
+}
+
+function createAvatarEl(user) {
+  const el = document.createElement("span");
+  el.className = "slot-avatar";
+  const name = (user.display_name || "").trim();
+  el.title = `${name || "未知使用者"} 有空`;
+
+  const picture = (user.picture_url || "").trim();
+  if (picture) {
+    const img = document.createElement("img");
+    img.src = picture;
+    img.alt = name || "avatar";
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.onerror = () => {
+      el.innerHTML = "";
+      const fallback = document.createElement("span");
+      fallback.className = "slot-avatar-fallback";
+      fallback.textContent = initialOf(name);
+      el.appendChild(fallback);
+    };
+    el.appendChild(img);
+  } else {
+    const fallback = document.createElement("span");
+    fallback.className = "slot-avatar-fallback";
+    fallback.textContent = initialOf(name);
+    el.appendChild(fallback);
+  }
+  return el;
+}
+
+function initialOf(name) {
+  const trimmed = (name || "").trim();
+  if (!trimmed) return "?";
+  return Array.from(trimmed)[0];
 }
 
 function initDetailPanel() {
