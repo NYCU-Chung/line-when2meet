@@ -102,6 +102,7 @@ function setBrushMode(statusOrNull) {
 
 window.addEventListener("DOMContentLoaded", async () => {
   groupId = LiffHelper.getParam("group");
+  setLoadingText("登入中...");
 
   if (!groupId) {
     showError("缺少群組資訊，請從 LINE 群組內點擊卡片連結進入。");
@@ -118,13 +119,20 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   const profile = LiffHelper.getProfile();
   document.getElementById("user-name").textContent = profile.displayName;
+
+  // /api/schedule 會自動 upsert user/group，因此不需額外打一支 /api/auth。
+  setLoadingText("載入課表中...");
+  const loaded = await loadSchedule();
+  if (!loaded) return;
+
+  setLoadingText("生成畫面中...");
+  renderCarousel();
+  // Let browser paint the generated DOM before switching screens.
+  await nextFrame();
+
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
 
-  // /api/schedule 會自動 upsert user/group，因此不需額外打一支 /api/auth。
-  await loadSchedule();
-
-  renderCarousel();
   initDayIndicator();
   initModal();
   initBrushBar();
@@ -139,24 +147,31 @@ window.addEventListener("DOMContentLoaded", async () => {
 // ── 載入排程 ─────────────────────────────────────────────────────────────────
 
 async function loadSchedule() {
-  const resp = await fetch(`/api/schedule?group=${encodeURIComponent(groupId)}`, {
-    headers: { Authorization: `Bearer ${LiffHelper.getIdToken()}` },
-  });
-  if (!resp.ok) {
-    let msg = `⚠️ 載入失敗（${resp.status}）`;
-    try {
-      const data = await resp.json();
-      if (data && data.error) msg = `⚠️ ${data.error}`;
-      if (resp.status === 401) msg = "⚠️ 登入失效，請回到 LINE 重新開啟";
-      if (resp.status === 410) msg = "⚠️ 連結已過期，請回到群組輸入 when2meet 取得新連結";
-      if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
-    } catch { /* ignore */ }
-    showToast(msg);
-    return;
+  try {
+    const resp = await fetch(`/api/schedule?group=${encodeURIComponent(groupId)}`, {
+      headers: { Authorization: `Bearer ${LiffHelper.getIdToken()}` },
+    });
+    if (!resp.ok) {
+      let msg = `載入失敗（${resp.status}）`;
+      try {
+        const data = await resp.json();
+        if (data && data.error) msg = String(data.error);
+        if (resp.status === 401) msg = "登入失效，請回到 LINE 重新開啟";
+        if (resp.status === 410) msg = "連結已過期，請回到群組輸入 when2meet 取得新連結";
+        if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
+      } catch { /* ignore */ }
+      showError(msg);
+      return false;
+    }
+    const data = await resp.json();
+    serverData = data.schedules || {};
+    localData = JSON.parse(JSON.stringify(serverData)); // deep copy
+    return true;
+  } catch (e) {
+    console.error(e);
+    showError("網路錯誤，請稍候重試");
+    return false;
   }
-  const data = await resp.json();
-  serverData = data.schedules || {};
-  localData = JSON.parse(JSON.stringify(serverData)); // deep copy
 }
 
 // ── 渲染 Carousel ──────────────────────────────────────────────────────────
@@ -164,6 +179,7 @@ async function loadSchedule() {
 function renderCarousel() {
   const carousel = document.getElementById("day-carousel");
   carousel.innerHTML = "";
+  const fragment = document.createDocumentFragment();
 
   DAY_CODES.forEach((day, dayIdx) => {
     const card = document.createElement("div");
@@ -185,8 +201,9 @@ function renderCarousel() {
       slotList.appendChild(row);
     });
 
-    carousel.appendChild(card);
+    fragment.appendChild(card);
   });
+  carousel.appendChild(fragment);
 
   // Scroll Snap 監聽（切換 active card）
   const scrollHandler = debounce(() => {
@@ -648,10 +665,19 @@ function showToast(msg) {
 
 function showError(msg) {
   document.getElementById("loading").innerHTML = `
-    <div style="text-align:center;padding:40px 20px;color:#e53935">
-      <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+    <div class="loading-error">
+      <div class="loading-error-icon">⚠️</div>
       <div>${msg}</div>
     </div>`;
+}
+
+function setLoadingText(msg) {
+  const el = document.getElementById("loading-text");
+  if (el) el.textContent = msg;
+}
+
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 function debounce(fn, ms) {

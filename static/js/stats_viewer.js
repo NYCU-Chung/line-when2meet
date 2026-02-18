@@ -23,6 +23,7 @@ const STATUS_CSS = {
 let statsData = null;
 let groupId = null;
 let currentDayIndex = 0;
+let busyDelayTimer = null;
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
@@ -35,7 +36,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
-  await loadStats();
+  const loaded = await loadStats();
+  if (!loaded) {
+    return;
+  }
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
 
@@ -45,13 +49,20 @@ window.addEventListener("DOMContentLoaded", async () => {
 });
 
 async function loadStats() {
-  const resp = await fetch(`/api/stats?group=${encodeURIComponent(groupId)}`);
-  if (!resp.ok) {
-    showError("載入失敗，請重新整理");
-    return;
+  try {
+    const resp = await fetch(`/api/stats?group=${encodeURIComponent(groupId)}`);
+    if (!resp.ok) {
+      showError("載入失敗，請稍候重試");
+      return false;
+    }
+    statsData = await resp.json();
+    document.getElementById("stat-summary").textContent = `共 ${statsData.total_users} 人參與`;
+    return true;
+  } catch (err) {
+    console.error(err);
+    showError("載入失敗，請稍候重試");
+    return false;
   }
-  statsData = await resp.json();
-  document.getElementById("stat-summary").textContent = `共 ${statsData.total_users} 人參與`;
 }
 
 function initDayTabs() {
@@ -63,11 +74,15 @@ function initDayTabs() {
     btn.type = "button";
     btn.className = `day-tab${idx === currentDayIndex ? " active" : ""}`;
     btn.textContent = DAY_NAMES[day];
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       if (idx === currentDayIndex) return;
       currentDayIndex = idx;
       updateDayTabs();
-      renderCurrentDay();
+      await runWithBusy("切換日期中...", async () => {
+        // Let the tab state paint first so switching feels responsive.
+        await nextFrame();
+        renderCurrentDay();
+      });
     });
     wrap.appendChild(btn);
   });
@@ -133,13 +148,13 @@ function createSlotRow(day, slot, slotInfo, total) {
   return row;
 }
 
-/** 回傳較明亮的熱力圖顏色（淡藍灰 → 亮綠） */
+/** 回傳偏柔和的熱力圖顏色（灰藍綠 → 中綠） */
 function heatColor(ratio) {
-  if (ratio <= 0) return "#F4F7F5";
+  if (ratio <= 0) return "#F3F6F4";
   const r = Math.min(1, Math.max(0, ratio));
-  const hue = Math.round(188 - r * 62); // 188 ~ 126
-  const sat = Math.round(42 + r * 26);  // 42% ~ 68%
-  const light = Math.round(97 - r * 40); // 97% ~ 57%
+  const hue = Math.round(172 - r * 28); // 172 ~ 144
+  const sat = Math.round(26 + r * 22);  // 26% ~ 48%
+  const light = Math.round(95 - r * 30); // 95% ~ 65%
   return `hsl(${hue}, ${sat}%, ${light}%)`;
 }
 
@@ -199,6 +214,7 @@ function hideDetail() {
 }
 
 function showError(msg) {
+  setPageBusy(false);
   document.getElementById("loading").innerHTML = `
     <div class="loading-error">
       <div class="loading-error-icon">⚠️</div>
@@ -208,4 +224,38 @@ function showError(msg) {
 
 function escHtml(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function setPageBusy(show, text = "載入中...") {
+  const layer = document.getElementById("page-busy");
+  if (!layer) return;
+  const label = layer.querySelector(".page-busy-text");
+  if (label) {
+    label.textContent = text;
+  }
+  if (show) {
+    layer.classList.add("show");
+  } else {
+    layer.classList.remove("show");
+  }
+}
+
+async function runWithBusy(label, task) {
+  if (busyDelayTimer) {
+    clearTimeout(busyDelayTimer);
+  }
+  busyDelayTimer = setTimeout(() => {
+    setPageBusy(true, label);
+  }, 140);
+  try {
+    await task();
+  } finally {
+    clearTimeout(busyDelayTimer);
+    busyDelayTimer = null;
+    setPageBusy(false);
+  }
+}
+
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
 }

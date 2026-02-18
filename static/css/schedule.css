@@ -417,6 +417,12 @@ body {
   gap: 12px;
 }
 
+.loading-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6f7b76;
+}
+
 .spinner {
   width: 36px;
   height: 36px;
@@ -427,6 +433,17 @@ body {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-error {
+  text-align: center;
+  padding: 40px 20px;
+  color: #e53935;
+}
+
+.loading-error-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
 
 /* bottom padding for fixed save bar */
 .content-padding { padding-bottom: 80px; }
