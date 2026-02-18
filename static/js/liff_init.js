@@ -4,6 +4,7 @@
 const LiffHelper = {
   profile: null,
   idToken: null,
+  accessToken: null,
 
   async init(liffId) {
     await liff.init({ liffId });
@@ -13,6 +14,7 @@ const LiffHelper = {
     }
     this.profile = await liff.getProfile();
     this.idToken = liff.getIDToken();
+    this.accessToken = liff.getAccessToken();
     return true;
   },
 
@@ -26,7 +28,8 @@ const LiffHelper = {
       }
       this.profile = await liff.getProfile();
       this.idToken = liff.getIDToken();
-      if (this.idToken) return true;
+      this.accessToken = liff.getAccessToken();
+      if (this.idToken || this.accessToken) return true;
 
       // Logged in but no id token: force re-login.
       liff.login({ redirectUri: window.location.href });
@@ -38,6 +41,7 @@ const LiffHelper = {
 
   getProfile() { return this.profile; },
   getIdToken() { return this.idToken; },
+  getAccessToken() { return this.accessToken; },
 
   _safeDecodeURIComponent(s) {
     if (typeof s !== "string") return s;

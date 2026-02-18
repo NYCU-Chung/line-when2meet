@@ -683,9 +683,20 @@ function showError(msg) {
 }
 
 async function fetchWithAuthRetry(url, options = {}, retried = false) {
+  const cred = getAuthCredential();
+  if (!cred && !retried) {
+    const recovered = await LiffHelper.recoverAuth(LIFF_ID);
+    if (recovered) {
+      return fetchWithAuthRetry(url, options, true);
+    }
+  }
+
   const headers = {
     ...(options.headers || {}),
-    Authorization: `Bearer ${LiffHelper.getIdToken() || ""}`,
+    ...(cred ? {
+      Authorization: `Bearer ${cred.token}`,
+      "X-Line-Token-Type": cred.type,
+    } : {}),
   };
   const resp = await fetch(url, { ...options, headers });
   if (resp.status !== 401 || retried) {
@@ -698,6 +709,18 @@ async function fetchWithAuthRetry(url, options = {}, retried = false) {
   }
 
   return fetchWithAuthRetry(url, options, true);
+}
+
+function getAuthCredential() {
+  const idToken = (LiffHelper.getIdToken() || "").trim();
+  if (idToken) {
+    return { token: idToken, type: "id_token" };
+  }
+  const accessToken = (LiffHelper.getAccessToken() || "").trim();
+  if (accessToken) {
+    return { token: accessToken, type: "access_token" };
+  }
+  return null;
 }
 
 function setLoadingText(msg) {

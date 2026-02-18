@@ -62,9 +62,10 @@ def resolve_group_id(conn, group_value):
     return get_or_create_group(conn, gv)
 
 
-def verify_liff_token(id_token):
+def verify_liff_id_token(id_token):
     """驗證 LIFF ID Token，回傳 (line_user_id, display_name, picture_url) 或 raise ValueError。"""
-    cached = _get_cached_verify_result(id_token)
+    cache_key = f"id:{id_token}"
+    cached = _get_cached_verify_result(cache_key)
     if cached:
         return cached
 
@@ -93,15 +94,85 @@ def verify_liff_token(id_token):
         raise ValueError("invalid token")
 
     result = (sub, data.get("name", ""), data.get("picture", ""))
-    _set_cached_verify_result(id_token, result)
+    _set_cached_verify_result(cache_key, result)
     return result
+
+
+def verify_liff_access_token(access_token):
+    """驗證 LIFF Access Token，回傳 (line_user_id, display_name, picture_url) 或 raise ValueError。"""
+    cache_key = f"at:{access_token}"
+    cached = _get_cached_verify_result(cache_key)
+    if cached:
+        return cached
+
+    channel_id = Config.LIFF_ID_SCHEDULE.split("-")[0]
+    try:
+        verify_resp = _line_verify_session.get(
+            "https://api.line.me/oauth2/v2.1/verify",
+            params={"access_token": access_token},
+            timeout=(2, 4),
+        )
+    except requests.RequestException as e:
+        raise TokenServiceUnavailableError("line access-token verify failed") from e
+
+    if verify_resp.status_code != 200:
+        if verify_resp.status_code >= 500 or verify_resp.status_code == 429:
+            raise TokenServiceUnavailableError(f"line access-token verify status={verify_resp.status_code}")
+        raise ValueError("invalid token")
+
+    try:
+        verify_data = verify_resp.json()
+    except ValueError as e:
+        raise TokenServiceUnavailableError("line access-token verify bad json") from e
+
+    if str(verify_data.get("client_id", "")) != str(channel_id):
+        raise ValueError("invalid token")
+
+    try:
+        profile_resp = _line_verify_session.get(
+            "https://api.line.me/v2/profile",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=(2, 4),
+        )
+    except requests.RequestException as e:
+        raise TokenServiceUnavailableError("line profile request failed") from e
+
+    if profile_resp.status_code != 200:
+        if profile_resp.status_code >= 500 or profile_resp.status_code == 429:
+            raise TokenServiceUnavailableError(f"line profile status={profile_resp.status_code}")
+        raise ValueError("invalid token")
+
+    try:
+        profile = profile_resp.json()
+    except ValueError as e:
+        raise TokenServiceUnavailableError("line profile bad json") from e
+
+    sub = profile.get("userId")
+    if not sub:
+        raise ValueError("invalid token")
+
+    result = (sub, profile.get("displayName", ""), profile.get("pictureUrl", ""))
+    _set_cached_verify_result(cache_key, result)
+    return result
+
+
+def verify_liff_token(token, token_type):
+    if token_type == "access_token":
+        return verify_liff_access_token(token)
+    # default to id_token
+    return verify_liff_id_token(token)
 
 
 def get_token_from_request():
     auth = request.headers.get("Authorization", "")
+    token_type = (request.headers.get("X-Line-Token-Type", "") or "").strip().lower()
     if auth.startswith("Bearer "):
-        return auth[7:]
-    return None
+        token = auth[7:]
+        inferred_type = token_type if token_type in {"id_token", "access_token"} else ""
+        if not inferred_type:
+            inferred_type = "id_token" if token.count(".") == 2 else "access_token"
+        return token, inferred_type
+    return None, None
 
 
 # ── POST /api/auth ─────────────────────────────────────────────────────────────
@@ -110,10 +181,13 @@ def get_token_from_request():
 def auth():
     body = request.get_json(silent=True) or {}
     id_token = body.get("id_token")
+    access_token = body.get("access_token")
+    token = id_token or access_token
+    token_type = "id_token" if id_token else "access_token"
     group_value = body.get("group") or body.get("group_id")
 
-    if not id_token or not group_value:
-        return jsonify({"error": "id_token and group are required"}), 400
+    if not token or not group_value:
+        return jsonify({"error": "id_token/access_token and group are required"}), 400
 
     conn = get_db()
     try:
@@ -122,9 +196,9 @@ def auth():
             return jsonify({"error": "group not found (link expired). Please trigger the bot again in the group."}), 410
 
         try:
-            user_id, display_name, picture_url = verify_liff_token(id_token)
+            user_id, display_name, picture_url = verify_liff_token(token, token_type)
         except ValueError:
-            return jsonify({"error": "invalid id_token"}), 401
+            return jsonify({"error": "invalid token"}), 401
         except TokenServiceUnavailableError:
             return jsonify({"error": "line verify unavailable"}), 503
 
@@ -141,10 +215,10 @@ def auth():
 
 @api_bp.route("/schedule", methods=["GET"])
 def get_schedule():
-    id_token = get_token_from_request()
+    token, token_type = get_token_from_request()
     group_value = request.args.get("group") or request.args.get("group_id")
 
-    if not id_token or not group_value:
+    if not token or not group_value:
         return jsonify({"error": "Authorization header and group are required"}), 400
 
     conn = get_db()
@@ -154,7 +228,7 @@ def get_schedule():
             return jsonify({"error": "group not found (link expired). Please trigger the bot again in the group."}), 410
 
         try:
-            user_id, display_name, picture_url = verify_liff_token(id_token)
+            user_id, display_name, picture_url = verify_liff_token(token, token_type)
         except ValueError:
             return jsonify({"error": "invalid token"}), 401
         except TokenServiceUnavailableError:
@@ -174,8 +248,8 @@ def get_schedule():
 
 @api_bp.route("/schedule", methods=["POST"])
 def post_schedule():
-    id_token = get_token_from_request()
-    if not id_token:
+    token, token_type = get_token_from_request()
+    if not token:
         return jsonify({"error": "Authorization header required"}), 400
 
     body = request.get_json(silent=True) or {}
@@ -192,7 +266,7 @@ def post_schedule():
             return jsonify({"error": "group not found (link expired). Please trigger the bot again in the group."}), 410
 
         try:
-            user_id, display_name, picture_url = verify_liff_token(id_token)
+            user_id, display_name, picture_url = verify_liff_token(token, token_type)
         except ValueError:
             return jsonify({"error": "invalid token"}), 401
         except TokenServiceUnavailableError:
