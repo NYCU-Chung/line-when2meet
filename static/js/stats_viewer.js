@@ -6,6 +6,7 @@
  */
 
 const STATUS_LABELS = {
+  0: "有空",
   1: "上課",
   2: "忙碌",
   3: "其他",
@@ -13,6 +14,7 @@ const STATUS_LABELS = {
   5: "回家",
 };
 const STATUS_CSS = {
+  0: "status-free",
   1: "status-class",
   2: "status-busy",
   3: "status-other",
@@ -388,6 +390,9 @@ function showDetail(day, slot, slotInfo, total) {
   const details = (slotInfo && slotInfo.details) ? slotInfo.details : [];
   const freeCount = (slotInfo && typeof slotInfo.free_count === "number") ? slotInfo.free_count : 0;
   const busyCount = details.length;
+  const allUsers = getAllUsers();
+  const freeUsers = getFreeUsers(allUsers, slotInfo);
+  const busyUsers = [...details].sort((a, b) => Number(a.status) - Number(b.status));
 
   document.getElementById("panel-title").textContent = `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
   document.getElementById("panel-free-count").textContent = (
@@ -401,29 +406,64 @@ function showDetail(day, slot, slotInfo, total) {
 
   if (total === 0) {
     list.innerHTML = `<div class="detail-empty-msg">尚無人參與</div>`;
-  } else if (details.length === 0) {
-    list.innerHTML = `<div class="detail-allfree-msg">✅ 此時段所有人都有空</div>`;
   } else {
-    const sorted = [...details].sort((a, b) => Number(a.status) - Number(b.status));
-    sorted.forEach((item) => {
-      const div = document.createElement("div");
-      div.className = "detail-item";
-      div.innerHTML = `
-        <div class="detail-avatar">${item.display_name.charAt(0)}</div>
-        <div class="detail-info">
-          <div class="detail-name">${escHtml(item.display_name)}</div>
-          ${item.note ? `<div class="detail-note">${escHtml(item.note)}</div>` : ""}
-        </div>
-        <div class="detail-status ${STATUS_CSS[item.status] || "status-other"}">
-          ${STATUS_LABELS[item.status] || "其他"}
-        </div>
-      `;
-      list.appendChild(div);
-    });
+    appendSectionTitle(list, `有空（${freeUsers.length}）`);
+    if (freeUsers.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "detail-empty-msg";
+      empty.textContent = "此時段目前無人有空";
+      list.appendChild(empty);
+    } else {
+      freeUsers.forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "detail-item";
+        div.innerHTML = `
+          <div class="detail-avatar">${initialOf(item.display_name)}</div>
+          <div class="detail-info">
+            <div class="detail-name">${escHtml(item.display_name)}</div>
+          </div>
+          <div class="detail-status ${STATUS_CSS[0]}">
+            ${STATUS_LABELS[0]}
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    appendSectionTitle(list, `非空閒（${busyUsers.length}）`);
+    if (busyUsers.length === 0) {
+      const ok = document.createElement("div");
+      ok.className = "detail-allfree-msg";
+      ok.textContent = "✅ 此時段所有人都有空";
+      list.appendChild(ok);
+    } else {
+      busyUsers.forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "detail-item";
+        div.innerHTML = `
+          <div class="detail-avatar">${initialOf(item.display_name)}</div>
+          <div class="detail-info">
+            <div class="detail-name">${escHtml(item.display_name)}</div>
+            ${item.note ? `<div class="detail-note">${escHtml(item.note)}</div>` : ""}
+          </div>
+          <div class="detail-status ${STATUS_CSS[item.status] || "status-other"}">
+            ${STATUS_LABELS[item.status] || "其他"}
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
   }
 
   overlay.classList.add("show");
   panel.classList.add("show");
+}
+
+function appendSectionTitle(list, text) {
+  const title = document.createElement("div");
+  title.className = "detail-section-title";
+  title.textContent = text;
+  list.appendChild(title);
 }
 
 function hideDetail() {
