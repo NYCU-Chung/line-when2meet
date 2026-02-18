@@ -27,9 +27,74 @@ let busyDelayTimer = null;
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
-window.addEventListener("DOMContentLoaded", async () => {
+function normalizeGroupId(v) {
+  return (v || "").toString().trim();
+}
+
+function safeDecodeURIComponent(s) {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function decodeMulti(s, rounds = 2) {
+  let out = s;
+  for (let i = 0; i < rounds; i += 1) {
+    const next = safeDecodeURIComponent(out);
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
+function readFromQueryBlob(blob, key) {
+  if (!blob || typeof blob !== "string") return null;
+
+  const candidates = [blob, decodeMulti(blob, 2)];
+  for (const raw of candidates) {
+    const text = String(raw || "").trim();
+    if (!text) continue;
+
+    try {
+      const fullUrl = new URL(text);
+      const value = fullUrl.searchParams.get(key);
+      if (value) return value;
+    } catch {
+      // ignore non-URL strings
+    }
+
+    const noHash = text.startsWith("#") ? text.slice(1) : text;
+    const qIndex = noHash.indexOf("?");
+    const queryPart = qIndex >= 0 ? noHash.slice(qIndex + 1) : noHash.replace(/^\?/, "");
+    if (!queryPart) continue;
+    const sp = new URLSearchParams(queryPart);
+    const value = sp.get(key);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function resolveGroupId() {
   const url = new URL(window.location.href);
-  groupId = url.searchParams.get("group");
+
+  const direct = normalizeGroupId(url.searchParams.get("group") || url.searchParams.get("group_id"));
+  if (direct) return direct;
+
+  const fromHash = normalizeGroupId(readFromQueryBlob(url.hash, "group") || readFromQueryBlob(url.hash, "group_id"));
+  if (fromHash) return fromHash;
+
+  const stateRaw = url.searchParams.get("liff.state") || url.searchParams.get("liff_state");
+  const fromState = normalizeGroupId(readFromQueryBlob(stateRaw, "group") || readFromQueryBlob(stateRaw, "group_id"));
+  if (fromState) return fromState;
+
+  return normalizeGroupId(typeof INITIAL_GROUP_ID === "string" ? INITIAL_GROUP_ID : "");
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  groupId = resolveGroupId();
 
   if (!groupId) {
     showError("缺少群組資訊");

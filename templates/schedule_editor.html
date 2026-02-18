@@ -81,6 +81,7 @@
 <!-- 注入 Flask 模板變數到 JS -->
 <script>
   const LIFF_ID   = "{{ liff_id }}";
+  const INITIAL_GROUP_ID = {{ group_id | tojson }};
   const DAY_CODES = {{ day_codes | tojson }};
   const DAY_NAMES = {{ day_names | tojson }};
   const SLOT_CODES = {{ slot_codes | tojson }};

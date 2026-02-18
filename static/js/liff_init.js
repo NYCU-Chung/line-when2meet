@@ -24,23 +24,63 @@ const LiffHelper = {
     try { return decodeURIComponent(s); } catch { return s; }
   },
 
+  _decodeMulti(s, rounds = 2) {
+    let out = s;
+    for (let i = 0; i < rounds; i += 1) {
+      const next = this._safeDecodeURIComponent(out);
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  },
+
+  _readFromQueryBlob(blob, key) {
+    if (!blob || typeof blob !== "string") return null;
+
+    const candidates = [blob, this._decodeMulti(blob, 2)];
+    for (const raw of candidates) {
+      const text = String(raw || "").trim();
+      if (!text) continue;
+
+      // Full URL case
+      try {
+        const fullUrl = new URL(text);
+        const value = fullUrl.searchParams.get(key);
+        if (value) return value;
+      } catch {
+        // ignore non-URL inputs
+      }
+
+      const noHash = text.startsWith("#") ? text.slice(1) : text;
+      const qIndex = noHash.indexOf("?");
+      const queryPart = qIndex >= 0 ? noHash.slice(qIndex + 1) : noHash.replace(/^\?/, "");
+      if (!queryPart) continue;
+      const sp = new URLSearchParams(queryPart);
+      const value = sp.get(key);
+      if (value) return value;
+    }
+
+    return null;
+  },
+
   /** 從 URL 取得 query string 參數 */
   getParam(key) {
     const url = new URL(window.location.href);
+
     // Normal query params (e.g. /schedule?group=123)
     const direct = url.searchParams.get(key);
     if (direct) return direct;
 
+    // Some LIFF browsers preserve params in hash.
+    const hashVal = this._readFromQueryBlob(url.hash, key);
+    if (hashVal) return hashVal;
+
     // LIFF often stores the original path/query inside `liff.state`.
     // Example: /schedule?liff.state=%3Fgroup%3D123  (or /schedule?liff.state=/schedule?group=123)
-    const stateRaw = url.searchParams.get("liff.state");
-    if (!stateRaw) return null;
+    const stateRaw = url.searchParams.get("liff.state") || url.searchParams.get("liff_state");
+    const stateVal = this._readFromQueryBlob(stateRaw, key);
+    if (stateVal) return stateVal;
 
-    const state = this._safeDecodeURIComponent(stateRaw);
-    // state might be "?group=123" or "/schedule?group=123" or "group=123"
-    const qIndex = state.indexOf("?");
-    const queryPart = qIndex >= 0 ? state.slice(qIndex + 1) : (state.startsWith("?") ? state.slice(1) : state);
-    const sp = new URLSearchParams(queryPart);
-    return sp.get(key);
+    return null;
   },
 };

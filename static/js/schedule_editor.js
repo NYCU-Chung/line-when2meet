@@ -31,6 +31,18 @@ let saving = false;
 let brushStatus = null;
 let brushArmed = false;
 
+function normalizeGroupId(v) {
+  return (v || "").toString().trim();
+}
+
+function resolveGroupId() {
+  const fromParam = normalizeGroupId(LiffHelper.getParam("group") || LiffHelper.getParam("group_id"));
+  if (fromParam) return fromParam;
+  const fromTemplate = normalizeGroupId(typeof INITIAL_GROUP_ID === "string" ? INITIAL_GROUP_ID : "");
+  if (fromTemplate) return fromTemplate;
+  return "";
+}
+
 function keyOf(day, slot) {
   return `${day}-${slot}`;
 }
@@ -101,7 +113,7 @@ function setBrushMode(statusOrNull) {
 // ── 初始化 ──────────────────────────────────────────────────────────────────
 
 window.addEventListener("DOMContentLoaded", async () => {
-  groupId = LiffHelper.getParam("group");
+  groupId = resolveGroupId();
   setLoadingText("登入中...");
 
   if (!groupId) {
