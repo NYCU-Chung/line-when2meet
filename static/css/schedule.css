@@ -122,7 +122,38 @@ body {
   scrollbar-width: none;
   gap: 0;
 }
-.day-carousel::-webkit-scrollbar { display: none; }
+.day-carousel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Desktop: show a draggable horizontal scrollbar for mouse users. */
+@media (hover: hover) and (pointer: fine) {
+  .day-carousel {
+    scrollbar-width: thin;
+    scrollbar-color: #8daea0 #e7efe9;
+  }
+
+  .day-carousel::-webkit-scrollbar {
+    width: auto;
+    height: 12px;
+  }
+
+  .day-carousel::-webkit-scrollbar-track {
+    background: #e7efe9;
+    border-radius: 999px;
+  }
+
+  .day-carousel::-webkit-scrollbar-thumb {
+    background: #8daea0;
+    border-radius: 999px;
+    border: 2px solid #e7efe9;
+  }
+
+  .day-carousel::-webkit-scrollbar-thumb:hover {
+    background: #73998a;
+  }
+}
 
 /* ── Day Card ── */
 .day-card {
