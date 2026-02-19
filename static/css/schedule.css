@@ -132,15 +132,20 @@ body {
 }
 
 @media (min-width: 960px) {
+  :root {
+    --desktop-xscroll-height: 16px;
+    --desktop-xscroll-gap: 10px;
+  }
+
   .page-xscroll {
     position: fixed;
     left: 50%;
-    bottom: 92px;
+    bottom: 0;
     transform: translateX(-50%);
     width: min(1140px, calc(100vw - 80px));
     overflow-x: auto;
     overflow-y: hidden;
-    height: 16px;
+    height: var(--desktop-xscroll-height);
     z-index: 320;
     display: none;
   }
@@ -554,13 +559,13 @@ body {
   }
 
   .content-padding {
-    padding-bottom: 130px;
+    padding-bottom: 160px;
   }
 
   .save-bar {
     left: 50%;
     right: auto;
-    bottom: 16px;
+    bottom: calc(var(--desktop-xscroll-height) + var(--desktop-xscroll-gap));
     width: min(1140px, calc(100vw - 80px));
     transform: translateX(-50%);
     border: 1px solid #e6ede9;
@@ -577,7 +582,7 @@ body {
   }
 
   .toast {
-    bottom: 100px;
+    bottom: 118px;
   }
 
   .modal-overlay {
