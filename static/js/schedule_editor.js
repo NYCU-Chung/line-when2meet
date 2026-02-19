@@ -27,6 +27,11 @@ let currentDayIndex = 0;
 
 let dirty = false;
 let saving = false;
+const AUTO_SAVE_DELAY_MS = 1800;
+let autoSaveTimer = null;
+let autoSaveState = "idle"; // idle | pending | saving | saved | error
+let autoSaveHint = "";
+let lastSavedAt = 0;
 
 // 筆刷狀態：0 代表清除（回到預設有空）
 let brushStatus = null;
@@ -71,7 +76,9 @@ function setEntry(day, slot, statusOrNull, note) {
 
 function markDirty() {
   if (!dirty) dirty = true;
+  scheduleAutoSave();
   refreshSaveButton();
+  refreshSaveMeta();
 }
 
 function refreshSaveButton() {
@@ -80,8 +87,68 @@ function refreshSaveButton() {
 
   btn.disabled = saving || !dirty;
   if (saving) btn.textContent = "儲存中...";
-  else if (dirty) btn.textContent = "儲存";
+  else if (dirty) btn.textContent = "立即儲存";
   else btn.textContent = "已儲存";
+}
+
+function refreshSaveMeta() {
+  const el = document.getElementById("save-meta");
+  if (!el) return;
+  el.classList.remove("is-saving", "is-error");
+
+  if (autoSaveState === "saving") {
+    el.classList.add("is-saving");
+    el.textContent = autoSaveHint || "儲存中...";
+    return;
+  }
+  if (autoSaveState === "error") {
+    el.classList.add("is-error");
+    el.textContent = autoSaveHint || "儲存失敗，請點擊儲存重試";
+    return;
+  }
+  if (dirty) {
+    if (autoSaveState === "pending") {
+      el.textContent = "已變更，將自動儲存...";
+    } else {
+      el.textContent = "有未儲存變更";
+    }
+    return;
+  }
+  if (lastSavedAt > 0) {
+    el.textContent = `已儲存 ${formatTime(lastSavedAt)}`;
+    return;
+  }
+  el.textContent = "尚未變更";
+}
+
+function setAutoSaveState(state, hint = "") {
+  autoSaveState = state;
+  autoSaveHint = hint;
+  refreshSaveMeta();
+}
+
+function scheduleAutoSave() {
+  if (saving || !dirty) return;
+  clearAutoSaveTimer();
+  setAutoSaveState("pending");
+  autoSaveTimer = setTimeout(() => {
+    autoSaveTimer = null;
+    saveSchedule({ trigger: "auto" });
+  }, AUTO_SAVE_DELAY_MS);
+}
+
+function clearAutoSaveTimer() {
+  if (!autoSaveTimer) return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 }
 
 function setBrushMode(statusOrNull) {
@@ -165,6 +232,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   dirty = false;
   refreshSaveButton();
+  refreshSaveMeta();
 });
 
 // ── 載入排程 ─────────────────────────────────────────────────────────────────
@@ -188,6 +256,10 @@ async function loadSchedule() {
     const data = await resp.json();
     serverData = data.schedules || {};
     localData = JSON.parse(JSON.stringify(serverData)); // deep copy
+    if (Object.keys(localData).length > 0) {
+      lastSavedAt = Date.now();
+      setAutoSaveState("saved");
+    }
     return true;
   } catch (e) {
     console.error(e);
@@ -376,7 +448,7 @@ function applyCellVisual(cell, statusOrNull, note) {
   `;
 }
 
-function updateSlotCell(day, slot, statusOrNull, note) {
+function updateSlotCell(day, slot, statusOrNull, note, opts = {}) {
   const key = keyOf(day, slot);
   const existing = localData[key] || null;
 
@@ -401,6 +473,17 @@ function updateSlotCell(day, slot, statusOrNull, note) {
   const cell = document.querySelector(`.slot-cell[data-day="${day}"][data-slot="${slot}"]`);
   if (!cell) return;
   applyCellVisual(cell, statusOrNull, note);
+  if (opts.flash) {
+    triggerCellFlash(cell);
+  }
+}
+
+function triggerCellFlash(cell) {
+  if (!cell) return;
+  cell.classList.remove("paint-flash");
+  // Force reflow so repeated flashes can restart animation.
+  void cell.offsetWidth;
+  cell.classList.add("paint-flash");
 }
 
 // ── 星期指示列 ────────────────────────────────────────────────────────────────
@@ -583,7 +666,7 @@ function paintCell(cell) {
   pointerState.visited.add(key);
 
   if (brushStatus === 0) {
-    updateSlotCell(day, slot, 0, "");
+    updateSlotCell(day, slot, 0, "", { flash: true });
     return;
   }
 
@@ -592,7 +675,7 @@ function paintCell(cell) {
   if (!STATUS_CONFIG[nextStatus]) return;
   // 避免不小心把已寫備註的格子刷過就清掉備註：狀態沒變就保留 note。
   const nextNote = (existing && existing.status === nextStatus) ? (existing.note || "") : "";
-  updateSlotCell(day, slot, nextStatus, nextNote);
+  updateSlotCell(day, slot, nextStatus, nextNote, { flash: true });
 }
 
 // ── Modal（單格編輯）────────────────────────────────────────────────────────
@@ -667,13 +750,17 @@ function confirmModal() {
 // ── 儲存 ─────────────────────────────────────────────────────────────────────
 
 function initSaveButton() {
-  document.getElementById("save-btn").addEventListener("click", saveSchedule);
+  document.getElementById("save-btn").addEventListener("click", () => {
+    saveSchedule({ trigger: "manual" });
+  });
 }
 
-async function saveSchedule() {
+async function saveSchedule({ trigger = "manual" } = {}) {
   if (saving || !dirty) return;
+  clearAutoSaveTimer();
 
   saving = true;
+  setAutoSaveState("saving", trigger === "auto" ? "自動儲存中..." : "儲存中...");
   refreshSaveButton();
 
   // 只送差異，避免 sqlite 寫入過多造成 lock
@@ -700,7 +787,10 @@ async function saveSchedule() {
   if (schedules.length === 0) {
     dirty = false;
     saving = false;
+    lastSavedAt = Date.now();
+    setAutoSaveState("saved");
     refreshSaveButton();
+    refreshSaveMeta();
     return;
   }
 
@@ -716,7 +806,11 @@ async function saveSchedule() {
     if (resp.ok) {
       serverData = JSON.parse(JSON.stringify(localData));
       dirty = false;
-      showToast("✅ 已儲存成功！");
+      lastSavedAt = Date.now();
+      setAutoSaveState("saved");
+      if (trigger === "manual") {
+        showToast("✅ 已儲存成功！");
+      }
     } else {
       let msg = `❌ 儲存失敗（${resp.status}）`;
       try {
@@ -726,13 +820,16 @@ async function saveSchedule() {
         if (resp.status === 503) msg = "❌ LINE 驗證服務暫時忙碌，請稍候重試";
         if (data && data.detail) msg = `${msg}：${String(data.detail).slice(0, 80)}`;
       } catch { /* ignore */ }
-      showToast(msg);
+      setAutoSaveState("error", "自動儲存失敗，請點擊儲存重試");
+      showToast(trigger === "auto" ? "❌ 自動儲存失敗，請點擊儲存重試" : msg);
     }
   } catch (e) {
-    showToast("❌ 網路錯誤，請重試");
+    setAutoSaveState("error", "網路錯誤，請點擊儲存重試");
+    showToast(trigger === "auto" ? "❌ 自動儲存失敗，請點擊儲存重試" : "❌ 網路錯誤，請重試");
   } finally {
     saving = false;
     refreshSaveButton();
+    refreshSaveMeta();
   }
 }
 

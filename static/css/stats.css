@@ -55,6 +55,7 @@ body {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .view-controls label {
@@ -92,6 +93,41 @@ body {
   gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.filter-quick {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-chip {
+  appearance: none;
+  border: 1px solid #d5e3dc;
+  background: #f6faf8;
+  color: #506760;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.quick-chip:hover {
+  background: #eef6f1;
+}
+
+.quick-chip.active {
+  border-color: #9dc7ac;
+  background: #e7f4eb;
+  color: #2f7047;
+}
+
+.quick-chip:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .day-tabs::-webkit-scrollbar {
@@ -446,6 +482,31 @@ body {
   flex-shrink: 0;
 }
 
+.panel-nav {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.panel-nav-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid #d9e7de;
+  background: #f7fbf8;
+  color: #5f7870;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.panel-nav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .panel-subline {
   font-size: 12px;
   color: #83908b;
@@ -760,6 +821,15 @@ body {
     height: 36px;
     min-width: 228px;
     font-size: 14px;
+  }
+
+  .filter-quick {
+    margin-bottom: 10px;
+  }
+
+  .quick-chip {
+    font-size: 13px;
+    padding: 6px 12px;
   }
 
   .carousel-wrapper {

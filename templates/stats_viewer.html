@@ -21,12 +21,13 @@
     <h1>空閒時間統計</h1>
     <div class="stat-summary" id="stat-summary">載入中...</div>
     <div class="view-controls">
-      <label for="user-filter">個人快選</label>
+      <label for="user-filter">個人檢視</label>
       <select id="user-filter">
-        <option value="">統計模式</option>
+        <option value="">全部人（統計）</option>
       </select>
-      <button type="button" id="filter-btn" class="filter-btn">🎚️ Filter</button>
+      <button type="button" id="filter-btn" class="filter-btn">篩選</button>
     </div>
+    <div class="filter-quick" id="filter-quick"></div>
     <div class="day-tabs" id="day-tabs"></div>
   </header>
 
@@ -67,6 +68,10 @@
     <div>
       <div id="panel-title"></div>
       <div class="panel-subline" id="panel-free-count"></div>
+    </div>
+    <div class="panel-nav">
+      <button class="panel-nav-btn" id="panel-prev" type="button" aria-label="上一格">◀</button>
+      <button class="panel-nav-btn" id="panel-next" type="button" aria-label="下一格">▶</button>
     </div>
     <button class="panel-close" id="panel-close">✕</button>
   </div>

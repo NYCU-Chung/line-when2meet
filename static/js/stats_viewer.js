@@ -32,9 +32,11 @@ let selectedUserId = "";
 let userSlotMap = new Map();
 let selectedUserIds = new Set();
 let isFilterActive = false;
+let lastAppliedFilterUserIds = new Set();
 let pageXScrollBound = false;
 let syncingFromCarousel = false;
 let syncingFromPageXScroll = false;
+let detailCursor = null;
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
@@ -122,6 +124,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   buildUserSlotMap();
   initUserFilter();
   initFilterPanel();
+  initQuickFilter();
   initDayTabs();
   initPageXScroll();
   renderAllDays();
@@ -199,6 +202,7 @@ function initUserFilter() {
     }
 
     updateLegendHint();
+    renderQuickFilter();
     await runWithBusy("切換檢視中...", async () => {
       await nextFrame();
       renderAllDays();
@@ -561,6 +565,78 @@ function createDetailAvatarEl(user) {
   return el;
 }
 
+function initQuickFilter() {
+  renderQuickFilter();
+}
+
+function renderQuickFilter() {
+  const wrap = document.getElementById("filter-quick");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  const totalUsers = getAllUsers().length;
+  const allActive = !selectedUserId && !isFilterActive;
+
+  const defs = [
+    { key: "all", label: "全部", active: allActive, disabled: totalUsers <= 0 },
+    { key: "last", label: "最近篩選", active: false, disabled: lastAppliedFilterUserIds.size <= 0 },
+    { key: "invert", label: "反向", active: false, disabled: totalUsers <= 0 || !isFilterActive },
+  ];
+
+  defs.forEach((def) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `quick-chip${def.active ? " active" : ""}`;
+    btn.textContent = def.label;
+    btn.disabled = !!def.disabled;
+    btn.addEventListener("click", async () => {
+      await applyQuickFilter(def.key);
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+async function applyQuickFilter(type) {
+  const allUsers = getAllUsers();
+  const allIds = new Set(allUsers.map((u) => u.user_id));
+  if (allIds.size === 0) return;
+
+  const select = document.getElementById("user-filter");
+  selectedUserId = "";
+  if (select) select.value = "";
+
+  if (type === "all") {
+    selectedUserIds = new Set();
+    isFilterActive = false;
+  } else if (type === "last") {
+    selectedUserIds = new Set(lastAppliedFilterUserIds);
+    const total = allIds.size;
+    isFilterActive = selectedUserIds.size > 0 && selectedUserIds.size < total;
+  } else if (type === "invert") {
+    if (!isFilterActive) return;
+    const base = isFilterActive ? selectedUserIds : allIds;
+    const inverted = new Set();
+    allIds.forEach((id) => {
+      if (!base.has(id)) inverted.add(id);
+    });
+    selectedUserIds = inverted;
+    const total = allIds.size;
+    isFilterActive = selectedUserIds.size > 0 && selectedUserIds.size < total;
+  } else {
+    return;
+  }
+
+  const btn = document.getElementById("filter-btn");
+  if (btn) btn.classList.toggle("active", isFilterActive);
+
+  updateLegendHint();
+  renderQuickFilter();
+  await runWithBusy("更新統計中...", async () => {
+    await nextFrame();
+    renderAllDays();
+  });
+}
+
 function initialOf(name) {
   const trimmed = (name || "").trim();
   if (!trimmed) return "?";
@@ -570,6 +646,52 @@ function initialOf(name) {
 function initDetailPanel() {
   document.getElementById("panel-close").addEventListener("click", hideDetail);
   document.getElementById("panel-overlay").addEventListener("click", hideDetail);
+  document.getElementById("panel-prev").addEventListener("click", () => moveDetail(-1));
+  document.getElementById("panel-next").addEventListener("click", () => moveDetail(1));
+  document.addEventListener("keydown", (e) => {
+    const panel = document.getElementById("detail-panel");
+    if (!panel || !panel.classList.contains("show")) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveDetail(-1);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      moveDetail(1);
+    }
+  });
+  refreshDetailNav();
+}
+
+function refreshDetailNav() {
+  const prev = document.getElementById("panel-prev");
+  const next = document.getElementById("panel-next");
+  if (!prev || !next) return;
+  if (!detailCursor) {
+    prev.disabled = true;
+    next.disabled = true;
+    return;
+  }
+  const totalSlots = DAY_CODES.length * SLOT_CODES.length;
+  const absolute = detailCursor.dayIndex * SLOT_CODES.length + detailCursor.slotIndex;
+  prev.disabled = absolute <= 0;
+  next.disabled = absolute >= (totalSlots - 1);
+}
+
+function moveDetail(step) {
+  if (!detailCursor) return;
+  const totalSlots = DAY_CODES.length * SLOT_CODES.length;
+  const absolute = detailCursor.dayIndex * SLOT_CODES.length + detailCursor.slotIndex;
+  const nextAbs = Math.max(0, Math.min(totalSlots - 1, absolute + step));
+  if (nextAbs === absolute) return;
+
+  const dayIndex = Math.floor(nextAbs / SLOT_CODES.length);
+  const slotIndex = nextAbs % SLOT_CODES.length;
+  const day = DAY_CODES[dayIndex];
+  const slot = SLOT_CODES[slotIndex];
+  const total = statsData.total_users || 0;
+  const key = `${day}-${slot}`;
+  const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
+  showDetail(day, slot, slotInfo, total);
 }
 
 function initFilterPanel() {
@@ -647,6 +769,9 @@ function applyFilter() {
 
   const totalUsers = getAllUsers().length;
   isFilterActive = selectedUserIds.size > 0 && selectedUserIds.size < totalUsers;
+  if (isFilterActive) {
+    lastAppliedFilterUserIds = new Set(selectedUserIds);
+  }
 
   const btn = document.getElementById('filter-btn');
   btn.classList.toggle('active', isFilterActive);
@@ -656,6 +781,7 @@ function applyFilter() {
   selectedUserId = '';
 
   updateLegendHint();
+  renderQuickFilter();
 }
 
 function getFilteredFreeCount(slotInfo) {
@@ -676,6 +802,10 @@ function getFilteredUsers() {
 function showDetail(day, slot, slotInfo, total) {
   const panel = document.getElementById("detail-panel");
   const overlay = document.getElementById("panel-overlay");
+  detailCursor = {
+    dayIndex: Math.max(0, DAY_CODES.indexOf(day)),
+    slotIndex: Math.max(0, SLOT_CODES.indexOf(slot)),
+  };
 
   const details = (slotInfo && slotInfo.details) ? slotInfo.details : [];
 
@@ -805,6 +935,7 @@ function showDetail(day, slot, slotInfo, total) {
 
   overlay.classList.add("show");
   panel.classList.add("show");
+  refreshDetailNav();
 }
 
 function appendSectionTitle(list, text) {
@@ -815,6 +946,8 @@ function appendSectionTitle(list, text) {
 }
 
 function hideDetail() {
+  detailCursor = null;
+  refreshDetailNav();
   document.getElementById("detail-panel").classList.remove("show");
   document.getElementById("panel-overlay").classList.remove("show");
 }
