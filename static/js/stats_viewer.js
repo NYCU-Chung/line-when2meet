@@ -521,6 +521,32 @@ function createAvatarEl(user) {
   return el;
 }
 
+function createDetailAvatarEl(user) {
+  const el = document.createElement("div");
+  el.className = "detail-avatar";
+  const name = (user.display_name || "").trim();
+  const picture = (user.picture_url || "").trim();
+
+  if (picture) {
+    const img = document.createElement("img");
+    img.src = picture;
+    img.alt = name || "avatar";
+    img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.onerror = () => {
+      // 圖片載入失敗，顯示首字母
+      el.innerHTML = "";
+      el.textContent = initialOf(name);
+    };
+    el.appendChild(img);
+  } else {
+    // 沒有圖片，直接顯示首字母
+    el.textContent = initialOf(name);
+  }
+
+  return el;
+}
+
 function initialOf(name) {
   const trimmed = (name || "").trim();
   if (!trimmed) return "?";
@@ -638,18 +664,43 @@ function showDetail(day, slot, slotInfo, total) {
   const overlay = document.getElementById("panel-overlay");
 
   const details = (slotInfo && slotInfo.details) ? slotInfo.details : [];
-  const freeCount = (slotInfo && typeof slotInfo.free_count === "number") ? slotInfo.free_count : 0;
-  const busyCount = details.length;
-  const allUsers = getAllUsers();
+
+  const allUsers = (isFilterActive && selectedUserIds.size > 0)
+    ? getFilteredUsers()
+    : getAllUsers();
+
+  let filteredTotal = (isFilterActive && selectedUserIds.size > 0)
+    ? selectedUserIds.size
+    : total;
+
+  let freeCount, busyCount;
+
+  if (isFilterActive && selectedUserIds.size > 0) {
+    freeCount = getFilteredFreeCount(slotInfo);
+    const filteredBusyDetails = details.filter(d => selectedUserIds.has(d.user_id));
+    busyCount = filteredBusyDetails.length;
+  } else {
+    freeCount = (slotInfo && typeof slotInfo.free_count === "number") ? slotInfo.free_count : 0;
+    busyCount = details.length;
+  }
+
   const freeUsers = getFreeUsers(allUsers, slotInfo);
-  const busyUsers = [...details].sort((a, b) => Number(a.status) - Number(b.status));
+
+  let rawBusyDetails = details;
+  if (isFilterActive && selectedUserIds.size > 0) {
+    rawBusyDetails = details.filter(d => selectedUserIds.has(d.user_id));
+  }
+  const busyUsers = [...rawBusyDetails].sort((a, b) => Number(a.status) - Number(b.status));
 
   document.getElementById("panel-title").textContent = `${DAY_NAMES[day]} ${slot} 節（${SLOT_TIMES[slot]}）`;
   let subline = (
-    total > 0
-      ? `有空 ${freeCount} / ${total} 人（非空閒 ${busyCount} 人）`
+    filteredTotal > 0
+      ? `有空 ${freeCount} / ${filteredTotal} 人（非空閒 ${busyCount} 人）`
       : "尚無人參與"
   );
+  if (isFilterActive && selectedUserIds.size > 0) {
+    subline += ` [已篩選 ${selectedUserIds.size} 人]`;
+  }
   const selectedUser = getSelectedUser();
   if (selectedUser) {
     const entry = getUserSlotEntry(selectedUser.user_id, day, slot);
@@ -661,8 +712,11 @@ function showDetail(day, slot, slotInfo, total) {
   const list = document.getElementById("detail-list");
   list.innerHTML = "";
 
-  if (total === 0) {
-    list.innerHTML = `<div class="detail-empty-msg">尚無人參與</div>`;
+  if (filteredTotal === 0) {
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "detail-empty-msg";
+    emptyMsg.textContent = "尚無人參與";
+    list.appendChild(emptyMsg);
   } else {
     appendSectionTitle(list, `有空（${freeUsers.length}）`);
     if (freeUsers.length === 0) {
@@ -674,15 +728,23 @@ function showDetail(day, slot, slotInfo, total) {
       freeUsers.forEach((item) => {
         const div = document.createElement("div");
         div.className = "detail-item";
-        div.innerHTML = `
-          <div class="detail-avatar">${initialOf(item.display_name)}</div>
-          <div class="detail-info">
-            <div class="detail-name">${escHtml(item.display_name)}</div>
-          </div>
-          <div class="detail-status ${STATUS_CSS[0]}">
-            ${STATUS_LABELS[0]}
-          </div>
-        `;
+
+        const avatarEl = createDetailAvatarEl(item);
+        div.appendChild(avatarEl);
+
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "detail-info";
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "detail-name";
+        nameDiv.textContent = item.display_name || "";
+        infoDiv.appendChild(nameDiv);
+        div.appendChild(infoDiv);
+
+        const statusDiv = document.createElement("div");
+        statusDiv.className = `detail-status ${STATUS_CSS[0]}`;
+        statusDiv.textContent = STATUS_LABELS[0];
+        div.appendChild(statusDiv);
+
         list.appendChild(div);
       });
     }
@@ -697,16 +759,31 @@ function showDetail(day, slot, slotInfo, total) {
       busyUsers.forEach((item) => {
         const div = document.createElement("div");
         div.className = "detail-item";
-        div.innerHTML = `
-          <div class="detail-avatar">${initialOf(item.display_name)}</div>
-          <div class="detail-info">
-            <div class="detail-name">${escHtml(item.display_name)}</div>
-            ${item.note ? `<div class="detail-note">${escHtml(item.note)}</div>` : ""}
-          </div>
-          <div class="detail-status ${STATUS_CSS[item.status] || "status-other"}">
-            ${STATUS_LABELS[item.status] || "其他"}
-          </div>
-        `;
+
+        const avatarEl = createDetailAvatarEl(item);
+        div.appendChild(avatarEl);
+
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "detail-info";
+        const nameDiv = document.createElement("div");
+        nameDiv.className = "detail-name";
+        nameDiv.textContent = item.display_name || "";
+        infoDiv.appendChild(nameDiv);
+
+        if (item.note) {
+          const noteDiv = document.createElement("div");
+          noteDiv.className = "detail-note";
+          noteDiv.textContent = item.note;
+          infoDiv.appendChild(noteDiv);
+        }
+
+        div.appendChild(infoDiv);
+
+        const statusDiv = document.createElement("div");
+        statusDiv.className = `detail-status ${STATUS_CSS[item.status] || "status-other"}`;
+        statusDiv.textContent = STATUS_LABELS[item.status] || "其他";
+        div.appendChild(statusDiv);
+
         list.appendChild(div);
       });
     }

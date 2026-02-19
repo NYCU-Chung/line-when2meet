@@ -7,8 +7,9 @@
  * - 1~5 = 非空閒狀態（會儲存）
  */
 
-// 預設「有空」不儲存、不顯示 icon；只儲存 1~5（非空閒狀態）
+// 所有狀態都顯示 icon（包括 status=0 有空）
 const STATUS_CONFIG = {
+  0: { label: "有空", icon: "✅", cls: "status-0" },
   1: { label: "上課", icon: "📚", cls: "status-1" },
   2: { label: "忙碌", icon: "🔴", cls: "status-2" },
   3: { label: "其他", icon: "⚪", cls: "status-3" },
@@ -53,11 +54,16 @@ function getEntry(day, slot) {
 
 function setEntry(day, slot, statusOrNull, note) {
   const key = keyOf(day, slot);
-  if (statusOrNull === null || statusOrNull === undefined || Number(statusOrNull) === 0) {
+  const status = (statusOrNull === null || statusOrNull === undefined) ? 0 : Number(statusOrNull);
+
+  // 如果是 status=0 且沒有註解，則刪除（節省儲存空間）
+  if (status === 0 && !note) {
     delete localData[key];
     return;
   }
-  localData[key] = { status: statusOrNull, note: note || "" };
+
+  // 儲存資料（包括有註解的 status=0）
+  localData[key] = { status: status, note: note || "" };
 }
 
 function markDirty() {
@@ -100,7 +106,7 @@ function setBrushMode(statusOrNull) {
       state.textContent = "已關閉";
       state.classList.remove("is-armed");
     } else {
-      const modeName = brushStatus === 0 ? "橡皮擦" : (STATUS_CONFIG[brushStatus]?.label || "筆刷");
+      const modeName = STATUS_CONFIG[brushStatus]?.label || "筆刷";
       state.textContent = `${modeName}模式`;
       state.classList.add("is-armed");
     }
@@ -275,23 +281,8 @@ function createSlotRow(day, slot, entryOrNull) {
 }
 
 function applyCellVisual(cell, statusOrNull, note) {
-  if (statusOrNull === null || statusOrNull === undefined || Number(statusOrNull) === 0) {
-    cell.className = "slot-cell status-empty";
-    cell.dataset.status = "";
-    cell.dataset.note = "";
-    cell.innerHTML = "";
-    return;
-  }
-
-  const status = Number(statusOrNull);
-  const cfg = STATUS_CONFIG[status];
-  if (!cfg) {
-    cell.className = "slot-cell status-empty";
-    cell.dataset.status = "";
-    cell.dataset.note = "";
-    cell.innerHTML = "";
-    return;
-  }
+  const status = (statusOrNull === null || statusOrNull === undefined) ? 0 : Number(statusOrNull);
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG[0];  // fallback 到有空
 
   cell.className = `slot-cell ${cfg.cls}`;
   cell.dataset.status = String(status);
@@ -551,11 +542,11 @@ function initModal() {
 }
 
 function updateModalNoteState() {
+  // 移除禁用邏輯，所有狀態都可以加註解
   const noteEl = document.getElementById("modal-note");
   if (!noteEl) return;
-  const disabled = Number(modalStatus) === 0;
-  noteEl.disabled = disabled;
-  if (disabled) noteEl.value = "";
+  // 備註框永遠啟用
+  noteEl.disabled = false;
 }
 
 function openModal(day, slot) {
