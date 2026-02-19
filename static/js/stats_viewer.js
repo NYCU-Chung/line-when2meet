@@ -120,7 +120,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   initUserFilter();
   initFilterPanel();
   initDayTabs();
-  renderCurrentDay();
+  renderAllDays();
+  initCarouselDrag();
   initDetailPanel();
   updateLegendHint();
   bindAvatarAutoLayout();
@@ -159,7 +160,7 @@ function initDayTabs() {
       await runWithBusy("切換日期中...", async () => {
         // Let the tab state paint first so switching feels responsive.
         await nextFrame();
-        renderCurrentDay();
+        renderAllDays();
       });
     });
     wrap.appendChild(btn);
@@ -196,7 +197,7 @@ function initUserFilter() {
     updateLegendHint();
     await runWithBusy("切換檢視中...", async () => {
       await nextFrame();
-      renderCurrentDay();
+      renderAllDays();
     });
   });
 }
@@ -255,35 +256,43 @@ function updateDayTabs() {
   });
 }
 
-function renderCurrentDay() {
+function renderAllDays() {
   const container = document.getElementById("day-carousel");
   container.innerHTML = "";
 
   const total = statsData.total_users || 0;
-  const day = DAY_CODES[currentDayIndex];
   const selectedUser = getSelectedUser();
 
-  const card = document.createElement("div");
-  card.className = "day-card";
-  card.innerHTML = `
-    <div class="day-card-header">
-      ${DAY_NAMES[day]}
-      <span>${day}</span>
-    </div>
-    <div class="slot-list" id="slots-${day}"></div>
-  `;
+  DAY_CODES.forEach((day, idx) => {
+    const card = document.createElement("div");
+    card.className = "day-card";
+    if (idx === currentDayIndex) {
+      card.classList.add("active");
+    }
+    card.dataset.dayIndex = idx;
+    card.innerHTML = `
+      <div class="day-card-header">
+        ${DAY_NAMES[day]}
+        <span>${day}</span>
+      </div>
+      <div class="slot-list" id="slots-${day}"></div>
+    `;
 
-  const slotList = card.querySelector(`#slots-${day}`);
-  SLOT_CODES.forEach((slot) => {
-    const key = `${day}-${slot}`;
-    const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
-    slotList.appendChild(createSlotRow(day, slot, slotInfo, total, selectedUser));
+    const slotList = card.querySelector(`#slots-${day}`);
+    SLOT_CODES.forEach((slot) => {
+      const key = `${day}-${slot}`;
+      const slotInfo = statsData.slots[key] || { free_count: total, details: [] };
+      slotList.appendChild(createSlotRow(day, slot, slotInfo, total, selectedUser));
+    });
+
+    container.appendChild(card);
   });
 
-  container.appendChild(card);
   if (!selectedUser) {
     requestAnimationFrame(() => refreshAvatarStrips(container));
   }
+
+  scrollToCurrentDay();
 }
 
 function createSlotRow(day, slot, slotInfo, total, selectedUser) {
@@ -592,7 +601,7 @@ function initFilterPanel() {
     closePanel();
     await runWithBusy('更新統計中...', async () => {
       await nextFrame();
-      renderCurrentDay();
+      renderAllDays();
     });
   });
 }
@@ -850,4 +859,66 @@ async function runWithBusy(label, task) {
 
 function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function scrollToCurrentDay() {
+  const container = document.getElementById("day-carousel");
+  if (!container) return;
+
+  const cards = container.querySelectorAll(".day-card");
+  const targetCard = cards[currentDayIndex];
+  if (!targetCard) return;
+
+  // Update active class
+  cards.forEach((card, idx) => {
+    card.classList.toggle("active", idx === currentDayIndex);
+  });
+
+  // Scroll to the target card
+  targetCard.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+}
+
+function initCarouselDrag() {
+  const container = document.getElementById("day-carousel");
+  if (!container) return;
+
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+
+  container.addEventListener("mousedown", (e) => {
+    // Only enable drag on desktop (width >= 960px)
+    if (window.innerWidth < 960) return;
+
+    isDown = true;
+    container.style.cursor = "grabbing";
+    container.style.userSelect = "none";
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  });
+
+  container.addEventListener("mouseleave", () => {
+    isDown = false;
+    container.style.cursor = "grab";
+    container.style.userSelect = "";
+  });
+
+  container.addEventListener("mouseup", () => {
+    isDown = false;
+    container.style.cursor = "grab";
+    container.style.userSelect = "";
+  });
+
+  container.addEventListener("mousemove", (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed multiplier
+    container.scrollLeft = scrollLeft - walk;
+  });
+
+  // Set initial cursor on desktop
+  if (window.innerWidth >= 960) {
+    container.style.cursor = "grab";
+  }
 }
