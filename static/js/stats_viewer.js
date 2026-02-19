@@ -30,6 +30,8 @@ let avatarResizeBound = false;
 let avatarResizeTimer = null;
 let selectedUserId = "";
 let userSlotMap = new Map();
+let selectedUserIds = new Set();
+let isFilterActive = false;
 
 // DAY_CODES, DAY_NAMES, SLOT_CODES, SLOT_TIMES 由 HTML 注入
 
@@ -116,6 +118,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   buildUserSlotMap();
   initUserFilter();
+  initFilterPanel();
   initDayTabs();
   renderCurrentDay();
   initDetailPanel();
@@ -182,6 +185,14 @@ function initUserFilter() {
   select.value = "";
   select.addEventListener("change", async () => {
     selectedUserId = normalizeGroupId(select.value);
+
+    if (selectedUserId) {
+      selectedUserIds.clear();
+      isFilterActive = false;
+      const btn = document.getElementById('filter-btn');
+      if (btn) btn.classList.remove('active');
+    }
+
     updateLegendHint();
     await runWithBusy("切換檢視中...", async () => {
       await nextFrame();
@@ -227,6 +238,10 @@ function updateLegendHint() {
     if (title) title.textContent = "個人狀態：";
     if (scale) scale.style.display = "none";
     hint.textContent = `（單人模式：${selectedUser.display_name || selectedUser.user_id}）`;
+  } else if (isFilterActive) {
+    if (title) title.textContent = "有空人數：";
+    if (scale) scale.style.display = "";
+    hint.textContent = `（已選 ${selectedUserIds.size} 人）`;
   } else {
     if (title) title.textContent = "有空頭像：";
     if (scale) scale.style.display = "";
@@ -286,8 +301,18 @@ function createSlotRow(day, slot, slotInfo, total, selectedUser) {
     const entry = getUserSlotEntry(selectedUser.user_id, day, slot);
     renderPersonalSlotCell(cell, entry);
   } else {
-    const freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
-    const allUsers = getAllUsers();
+    let freeCount, filteredTotal, allUsers;
+
+    if (isFilterActive && selectedUserIds.size > 0) {
+      filteredTotal = selectedUserIds.size;
+      freeCount = getFilteredFreeCount(slotInfo);
+      allUsers = getFilteredUsers();
+    } else {
+      filteredTotal = total;
+      freeCount = slotInfo && typeof slotInfo.free_count === "number" ? slotInfo.free_count : 0;
+      allUsers = getAllUsers();
+    }
+
     const freeUsers = getFreeUsers(allUsers, slotInfo);
     const avatarsWrap = document.createElement("div");
     avatarsWrap.className = "slot-avatars";
@@ -296,8 +321,8 @@ function createSlotRow(day, slot, slotInfo, total, selectedUser) {
 
     const countEl = document.createElement("div");
     countEl.className = `slot-count${allUsers.length > 0 && freeCount === allUsers.length ? " all-free" : ""}`;
-    countEl.textContent = total > 0 ? `${freeCount}/${total}` : "-";
-    countEl.title = `有空 ${freeCount} / ${total}`;
+    countEl.textContent = filteredTotal > 0 ? `${freeCount}/${filteredTotal}` : "-";
+    countEl.title = `有空 ${freeCount} / ${filteredTotal}`;
     cell.appendChild(countEl);
     renderAvatarStripForCell(cell);
   }
@@ -505,6 +530,107 @@ function initialOf(name) {
 function initDetailPanel() {
   document.getElementById("panel-close").addEventListener("click", hideDetail);
   document.getElementById("panel-overlay").addEventListener("click", hideDetail);
+}
+
+function initFilterPanel() {
+  const btn = document.getElementById('filter-btn');
+  const panel = document.getElementById('filter-panel');
+  const overlay = document.getElementById('filter-overlay');
+  const close = document.getElementById('filter-close');
+  const apply = document.getElementById('filter-apply');
+  const selectAll = document.getElementById('filter-select-all');
+  const selectNone = document.getElementById('filter-select-none');
+
+  btn.addEventListener('click', () => {
+    renderFilterList();
+    overlay.classList.add('show');
+    panel.classList.add('show');
+  });
+
+  const closePanel = () => {
+    overlay.classList.remove('show');
+    panel.classList.remove('show');
+  };
+  close.addEventListener('click', closePanel);
+  overlay.addEventListener('click', closePanel);
+
+  selectAll.addEventListener('click', () => {
+    document.querySelectorAll('.filter-item input[type="checkbox"]').forEach(cb => cb.checked = true);
+  });
+  selectNone.addEventListener('click', () => {
+    document.querySelectorAll('.filter-item input[type="checkbox"]').forEach(cb => cb.checked = false);
+  });
+
+  apply.addEventListener('click', async () => {
+    applyFilter();
+    closePanel();
+    await runWithBusy('更新統計中...', async () => {
+      await nextFrame();
+      renderCurrentDay();
+    });
+  });
+}
+
+function renderFilterList() {
+  const list = document.getElementById('filter-list');
+  list.innerHTML = '';
+
+  const users = getAllUsers().slice().sort((a, b) =>
+    (a.display_name || '').localeCompare(b.display_name || '', 'zh-Hant')
+  );
+
+  users.forEach(u => {
+    const item = document.createElement('div');
+    item.className = 'filter-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = u.user_id;
+    checkbox.id = `filter-user-${u.user_id}`;
+    checkbox.checked = selectedUserIds.has(u.user_id) || !isFilterActive;
+
+    const label = document.createElement('label');
+    label.htmlFor = checkbox.id;
+    label.textContent = u.display_name || u.user_id;
+    label.style.flex = '1';
+    label.style.cursor = 'pointer';
+
+    item.appendChild(checkbox);
+    item.appendChild(label);
+    list.appendChild(item);
+  });
+}
+
+function applyFilter() {
+  const checkedBoxes = document.querySelectorAll('.filter-item input[type="checkbox"]:checked');
+  selectedUserIds = new Set(Array.from(checkedBoxes).map(cb => cb.value));
+
+  const totalUsers = getAllUsers().length;
+  isFilterActive = selectedUserIds.size > 0 && selectedUserIds.size < totalUsers;
+
+  const btn = document.getElementById('filter-btn');
+  btn.classList.toggle('active', isFilterActive);
+
+  const userFilter = document.getElementById('user-filter');
+  if (userFilter) userFilter.value = '';
+  selectedUserId = '';
+
+  updateLegendHint();
+}
+
+function getFilteredFreeCount(slotInfo) {
+  const busyDetails = slotInfo.details || [];
+  const busySet = new Set(busyDetails.map(d => d.user_id));
+
+  let freeCount = 0;
+  for (const uid of selectedUserIds) {
+    if (!busySet.has(uid)) freeCount++;
+  }
+  return freeCount;
+}
+
+function getFilteredUsers() {
+  return getAllUsers().filter(u => selectedUserIds.has(u.user_id));
 }
 
 function showDetail(day, slot, slotInfo, total) {

@@ -21,10 +21,11 @@
     <h1>空閒時間統計</h1>
     <div class="stat-summary" id="stat-summary">載入中...</div>
     <div class="view-controls">
-      <label for="user-filter">檢視模式</label>
+      <label for="user-filter">個人快選</label>
       <select id="user-filter">
-        <option value="">全部人（統計）</option>
+        <option value="">統計模式</option>
       </select>
+      <button type="button" id="filter-btn" class="filter-btn">🎚️ Filter</button>
     </div>
     <div class="day-tabs" id="day-tabs"></div>
   </header>
@@ -67,6 +68,23 @@
     <button class="panel-close" id="panel-close">✕</button>
   </div>
   <div class="detail-list" id="detail-list"></div>
+</div>
+
+<!-- Filter Panel -->
+<div class="filter-overlay" id="filter-overlay"></div>
+<div class="filter-panel" id="filter-panel">
+  <div class="filter-panel-header">
+    <h3>選擇成員</h3>
+    <button type="button" class="panel-close" id="filter-close">✕</button>
+  </div>
+  <div class="filter-actions">
+    <button type="button" id="filter-select-all">全選</button>
+    <button type="button" id="filter-select-none">全不選</button>
+  </div>
+  <div class="filter-list" id="filter-list"></div>
+  <div class="filter-footer">
+    <button type="button" id="filter-apply" class="btn-primary">套用</button>
+  </div>
 </div>
 
 <!-- 注入模板變數 -->
