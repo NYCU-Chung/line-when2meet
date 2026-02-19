@@ -171,12 +171,12 @@ body {
   overflow-x: scroll;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  scrollbar-width: auto;
   gap: 0;
 }
 
 .day-carousel::-webkit-scrollbar {
-  display: none;
+  height: 10px;
 }
 
 .day-card {
