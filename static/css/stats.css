@@ -166,6 +166,10 @@ body {
   padding: 12px 0;
 }
 
+.page-xscroll {
+  display: none;
+}
+
 .day-carousel {
   display: flex;
   overflow-x: scroll;
@@ -709,7 +713,7 @@ body {
 
 @media (min-width: 960px) {
   body {
-    padding: 20px 24px 36px;
+    padding: 20px 24px 64px;
   }
 
   #main-content {
@@ -761,6 +765,27 @@ body {
   .carousel-wrapper {
     overflow: visible;
     padding: 18px 0 12px;
+  }
+
+  .page-xscroll {
+    position: fixed;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(1160px, calc(100vw - 48px));
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 16px;
+    z-index: 190;
+    display: none;
+  }
+
+  .page-xscroll.show {
+    display: block;
+  }
+
+  .page-xscroll-spacer {
+    height: 1px;
   }
 
   .day-carousel {
