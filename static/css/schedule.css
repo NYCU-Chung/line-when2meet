@@ -119,8 +119,39 @@ body {
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: auto;
+  scrollbar-width: none;
   gap: 0;
+}
+.day-carousel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.page-xscroll {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .page-xscroll {
+    position: fixed;
+    left: 50%;
+    bottom: 92px;
+    transform: translateX(-50%);
+    width: min(1140px, calc(100vw - 80px));
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 16px;
+    z-index: 320;
+    display: none;
+  }
+
+  .page-xscroll.show {
+    display: block;
+  }
+
+  .page-xscroll-spacer {
+    height: 1px;
+  }
 }
 
 /* ── Day Card ── */

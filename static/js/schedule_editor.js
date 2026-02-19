@@ -31,6 +31,9 @@ let saving = false;
 // 筆刷狀態：0 代表清除（回到預設有空）
 let brushStatus = null;
 let brushArmed = false;
+let pageXScrollBound = false;
+let syncingFromCarousel = false;
+let syncingFromPageXScroll = false;
 
 function normalizeGroupId(v) {
   return (v || "").toString().trim();
@@ -145,11 +148,13 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   setLoadingText("生成畫面中...");
   renderCarousel();
+  initPageXScroll();
   // Let browser paint the generated DOM before switching screens.
   await nextFrame();
 
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
+  refreshPageXScroll();
 
   initDayIndicator();
   initModal();
@@ -248,6 +253,81 @@ function renderCarousel() {
   }, 50);
 
   carousel.addEventListener("scroll", scrollHandler, { passive: true });
+  syncPageXScrollFromCarousel();
+}
+
+function initPageXScroll() {
+  if (pageXScrollBound) {
+    refreshPageXScroll();
+    return;
+  }
+
+  const carousel = document.getElementById("day-carousel");
+  const pageXScroll = document.getElementById("page-xscroll");
+  const spacer = document.getElementById("page-xscroll-spacer");
+  if (!carousel || !pageXScroll || !spacer) return;
+
+  pageXScrollBound = true;
+
+  pageXScroll.addEventListener("scroll", () => {
+    if (syncingFromCarousel) return;
+    const metrics = getPageXScrollMetrics(carousel, pageXScroll);
+    if (!metrics) return;
+
+    syncingFromPageXScroll = true;
+    const ratio = metrics.maxPageScroll > 0 ? (pageXScroll.scrollLeft / metrics.maxPageScroll) : 0;
+    carousel.scrollLeft = ratio * metrics.maxCarouselScroll;
+    syncingFromPageXScroll = false;
+  }, { passive: true });
+
+  carousel.addEventListener("scroll", () => {
+    if (syncingFromPageXScroll) return;
+    syncPageXScrollFromCarousel();
+  }, { passive: true });
+
+  window.addEventListener("resize", refreshPageXScroll);
+  refreshPageXScroll();
+}
+
+function refreshPageXScroll() {
+  const carousel = document.getElementById("day-carousel");
+  const pageXScroll = document.getElementById("page-xscroll");
+  const spacer = document.getElementById("page-xscroll-spacer");
+  if (!carousel || !pageXScroll || !spacer) return;
+
+  const desktop = (window.innerWidth || document.documentElement.clientWidth || 0) >= 960;
+  const maxCarouselScroll = Math.max(0, carousel.scrollWidth - carousel.clientWidth);
+  if (!desktop || maxCarouselScroll <= 0) {
+    pageXScroll.classList.remove("show");
+    pageXScroll.scrollLeft = 0;
+    spacer.style.width = "0px";
+    return;
+  }
+
+  pageXScroll.classList.add("show");
+  spacer.style.width = `${Math.ceil(carousel.scrollWidth)}px`;
+  syncPageXScrollFromCarousel();
+}
+
+function syncPageXScrollFromCarousel() {
+  const carousel = document.getElementById("day-carousel");
+  const pageXScroll = document.getElementById("page-xscroll");
+  if (!carousel || !pageXScroll || !pageXScroll.classList.contains("show")) return;
+
+  const metrics = getPageXScrollMetrics(carousel, pageXScroll);
+  if (!metrics) return;
+
+  syncingFromCarousel = true;
+  const ratio = metrics.maxCarouselScroll > 0 ? (carousel.scrollLeft / metrics.maxCarouselScroll) : 0;
+  pageXScroll.scrollLeft = ratio * metrics.maxPageScroll;
+  syncingFromCarousel = false;
+}
+
+function getPageXScrollMetrics(carousel, pageXScroll) {
+  const maxCarouselScroll = Math.max(0, carousel.scrollWidth - carousel.clientWidth);
+  const maxPageScroll = Math.max(0, pageXScroll.scrollWidth - pageXScroll.clientWidth);
+  if (maxCarouselScroll <= 0 || maxPageScroll <= 0) return null;
+  return { maxCarouselScroll, maxPageScroll };
 }
 
 function createSlotRow(day, slot, entryOrNull) {
