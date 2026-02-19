@@ -155,6 +155,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("loading").style.display = "none";
   document.getElementById("main-content").style.display = "block";
+  refreshFloatingScrollbar();
 
   initDayIndicator();
   initModal();
@@ -343,7 +344,7 @@ function refreshFloatingScrollbar() {
 }
 
 function getFloatingScrollbarMetrics(carousel, overlay) {
-  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  if ((window.innerWidth || document.documentElement.clientWidth || 0) < 960) {
     return null;
   }
 
