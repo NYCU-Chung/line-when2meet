@@ -31,6 +31,10 @@ let saving = false;
 // 筆刷狀態：0 代表清除（回到預設有空）
 let brushStatus = null;
 let brushArmed = false;
+let floatingScrollbarInited = false;
+let floatingScrollbarDragging = false;
+let floatingScrollbarDragStartX = 0;
+let floatingScrollbarDragStartLeft = 0;
 
 function normalizeGroupId(v) {
   return (v || "").toString().trim();
@@ -145,6 +149,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   setLoadingText("生成畫面中...");
   renderCarousel();
+  initFloatingScrollbar();
   // Let browser paint the generated DOM before switching screens.
   await nextFrame();
 
@@ -248,6 +253,115 @@ function renderCarousel() {
   }, 50);
 
   carousel.addEventListener("scroll", scrollHandler, { passive: true });
+  refreshFloatingScrollbar();
+}
+
+function initFloatingScrollbar() {
+  if (floatingScrollbarInited) {
+    refreshFloatingScrollbar();
+    return;
+  }
+
+  const carousel = document.getElementById("day-carousel");
+  const overlay = document.getElementById("carousel-scrollbar-overlay");
+  const thumb = document.getElementById("carousel-scrollbar-thumb");
+  if (!carousel || !overlay || !thumb) return;
+
+  floatingScrollbarInited = true;
+
+  const endDrag = () => {
+    floatingScrollbarDragging = false;
+  };
+
+  thumb.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (!overlay.classList.contains("show")) return;
+    e.preventDefault();
+    floatingScrollbarDragging = true;
+    floatingScrollbarDragStartX = e.clientX;
+    floatingScrollbarDragStartLeft = carousel.scrollLeft;
+    try { thumb.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+  });
+
+  overlay.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    if (e.target === thumb) return;
+    if (!overlay.classList.contains("show")) return;
+    e.preventDefault();
+
+    const metrics = getFloatingScrollbarMetrics(carousel, overlay, thumb);
+    if (!metrics) return;
+
+    const targetThumbX = clamp(
+      e.clientX - metrics.trackLeft - (metrics.thumbWidth / 2),
+      0,
+      metrics.maxThumbX
+    );
+    carousel.scrollLeft = metrics.maxThumbX > 0
+      ? (targetThumbX / metrics.maxThumbX) * metrics.maxScroll
+      : 0;
+  });
+
+  window.addEventListener("pointermove", (e) => {
+    if (!floatingScrollbarDragging) return;
+
+    const metrics = getFloatingScrollbarMetrics(carousel, overlay, thumb);
+    if (!metrics) return;
+
+    const deltaX = e.clientX - floatingScrollbarDragStartX;
+    const ratio = metrics.maxThumbX > 0 ? (metrics.maxScroll / metrics.maxThumbX) : 0;
+    const nextLeft = floatingScrollbarDragStartLeft + (deltaX * ratio);
+    carousel.scrollLeft = clamp(nextLeft, 0, metrics.maxScroll);
+  }, { passive: true });
+
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+  carousel.addEventListener("scroll", refreshFloatingScrollbar, { passive: true });
+  window.addEventListener("resize", refreshFloatingScrollbar);
+
+  refreshFloatingScrollbar();
+}
+
+function refreshFloatingScrollbar() {
+  const carousel = document.getElementById("day-carousel");
+  const overlay = document.getElementById("carousel-scrollbar-overlay");
+  const thumb = document.getElementById("carousel-scrollbar-thumb");
+  if (!carousel || !overlay || !thumb) return;
+
+  const metrics = getFloatingScrollbarMetrics(carousel, overlay, thumb);
+  if (!metrics) {
+    overlay.classList.remove("show");
+    return;
+  }
+
+  overlay.classList.add("show");
+  thumb.style.width = `${metrics.thumbWidth}px`;
+  const thumbX = metrics.maxScroll > 0
+    ? (carousel.scrollLeft / metrics.maxScroll) * metrics.maxThumbX
+    : 0;
+  thumb.style.transform = `translateX(${thumbX}px)`;
+}
+
+function getFloatingScrollbarMetrics(carousel, overlay) {
+  if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    return null;
+  }
+
+  const maxScroll = Math.max(0, carousel.scrollWidth - carousel.clientWidth);
+  if (maxScroll <= 0) return null;
+
+  const trackWidth = overlay.clientWidth;
+  if (!trackWidth) return null;
+
+  const rawThumb = trackWidth * (carousel.clientWidth / carousel.scrollWidth);
+  const thumbWidth = Math.max(56, Math.round(rawThumb));
+  const maxThumbX = Math.max(1, trackWidth - thumbWidth);
+  const trackLeft = overlay.getBoundingClientRect().left;
+  return { maxScroll, trackWidth, thumbWidth, maxThumbX, trackLeft };
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
 function createSlotRow(day, slot, entryOrNull) {
