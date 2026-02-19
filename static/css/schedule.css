@@ -116,60 +116,11 @@ body {
 
 .day-carousel {
   display: flex;
-  overflow-x: scroll;
+  overflow-x: auto;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  scrollbar-width: auto;
   gap: 0;
-}
-.day-carousel::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-.carousel-scrollbar-overlay {
-  position: fixed;
-  left: 50%;
-  bottom: 88px;
-  transform: translateX(-50%);
-  width: min(1040px, calc(100vw - 72px));
-  height: 14px;
-  border-radius: 999px;
-  border: 1px solid #d7e4dc;
-  background: rgba(231, 239, 233, 0.96);
-  box-shadow: 0 8px 24px rgba(24, 46, 36, 0.14);
-  z-index: 240;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-
-.carousel-scrollbar-overlay.show {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.carousel-scrollbar-thumb {
-  height: 100%;
-  min-width: 56px;
-  border-radius: inherit;
-  border: 1px solid #6f9686;
-  background: linear-gradient(180deg, #9abcae 0%, #7ea391 100%);
-  box-shadow: 0 2px 8px rgba(29, 63, 49, 0.2);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  will-change: transform, width;
-}
-
-.carousel-scrollbar-thumb:active {
-  cursor: grabbing;
-}
-
-@media (max-width: 959px) {
-  .carousel-scrollbar-overlay {
-    display: none !important;
-  }
 }
 
 /* ── Day Card ── */
