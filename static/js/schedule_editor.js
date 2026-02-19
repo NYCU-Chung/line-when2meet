@@ -16,6 +16,7 @@ const STATUS_CONFIG = {
   4: { label: "睡覺", icon: "😴", cls: "status-4" },
   5: { label: "回家", icon: "🏠", cls: "status-5" },
 };
+const SCHEDULE_HELP_SEEN_KEY = "w2m_schedule_help_seen_v1";
 
 // 伺服器回傳的 {day-slot: {status, note}}（只包含已選取的格子）
 let serverData = {};
@@ -186,6 +187,54 @@ function setBrushMode(statusOrNull) {
   if (!brushArmed) stopAutoScrollLoop();
 }
 
+function initScheduleHelpPanel() {
+  const panel = document.getElementById("schedule-help-panel");
+  const toggle = document.getElementById("schedule-help-toggle");
+  const closeBtn = document.getElementById("schedule-help-close");
+  if (!panel || !toggle || !closeBtn) return;
+
+  const setOpen = (open) => {
+    panel.classList.toggle("show", open);
+    panel.setAttribute("aria-hidden", open ? "false" : "true");
+    toggle.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.textContent = open ? "收起操作教學" : "查看操作教學";
+  };
+
+  toggle.addEventListener("click", () => {
+    const open = !panel.classList.contains("show");
+    setOpen(open);
+    markHelpSeen(SCHEDULE_HELP_SEEN_KEY);
+  });
+
+  closeBtn.addEventListener("click", () => {
+    setOpen(false);
+    markHelpSeen(SCHEDULE_HELP_SEEN_KEY);
+  });
+
+  const seen = isHelpSeen(SCHEDULE_HELP_SEEN_KEY);
+  setOpen(!seen);
+  if (!seen) {
+    markHelpSeen(SCHEDULE_HELP_SEEN_KEY);
+  }
+}
+
+function isHelpSeen(key) {
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markHelpSeen(key) {
+  try {
+    window.localStorage.setItem(key, "1");
+  } catch {
+    // ignore storage errors
+  }
+}
+
 // ── 初始化 ──────────────────────────────────────────────────────────────────
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -226,6 +275,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initDayIndicator();
   initModal();
   initBrushBar();
+  initScheduleHelpPanel();
   setBrushMode(null);
   initPaintHandlers();
   initSaveButton();

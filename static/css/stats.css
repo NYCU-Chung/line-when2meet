@@ -50,6 +50,106 @@ body {
   margin-bottom: 8px;
 }
 
+.help-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.help-toggle {
+  appearance: none;
+  border: 1px solid #cfe0d7;
+  background: #f4faf7;
+  color: #335f48;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.help-toggle.is-open {
+  background: #e7f3ec;
+  border-color: #aac8b8;
+}
+
+.help-inline-tip {
+  font-size: 12px;
+  color: #708079;
+}
+
+.help-panel {
+  display: none;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid #dbe9e1;
+  background: linear-gradient(180deg, #f9fcfa 0%, #f1f8f4 100%);
+  padding: 10px 11px;
+  box-shadow: 0 4px 14px rgba(30, 54, 42, 0.08);
+}
+
+.help-panel.show {
+  display: block;
+  animation: helpPanelFadeIn 0.18s ease;
+}
+
+.help-panel-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #2a5b3f;
+  margin-bottom: 8px;
+}
+
+.help-steps {
+  display: grid;
+  gap: 6px;
+}
+
+.help-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #486357;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.help-step-num {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid #bcd8c8;
+  background: #ffffff;
+  color: #2f6c4b;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-panel-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.help-dismiss {
+  appearance: none;
+  border: 1px solid #d5e5db;
+  background: #ffffff;
+  color: #4b6358;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .view-controls {
   display: flex;
   align-items: center;
@@ -719,6 +819,17 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes helpPanelFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 640px) {
   .day-card-header {
     padding: 11px 14px;
@@ -796,6 +907,22 @@ body {
 
   .stat-summary {
     font-size: 14px;
+  }
+
+  .help-toggle {
+    font-size: 13px;
+  }
+
+  .help-inline-tip {
+    font-size: 13px;
+  }
+
+  .help-panel-title {
+    font-size: 14px;
+  }
+
+  .help-step {
+    font-size: 13px;
   }
 
   .day-tabs {

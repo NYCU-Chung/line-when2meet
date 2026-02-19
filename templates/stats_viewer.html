@@ -20,6 +20,21 @@
   <header class="app-header">
     <h1>空閒時間統計</h1>
     <div class="stat-summary" id="stat-summary">載入中...</div>
+    <div class="help-row">
+      <button type="button" class="help-toggle" id="stats-help-toggle" aria-expanded="false">查看操作教學</button>
+      <span class="help-inline-tip">點格子可看有空名單</span>
+    </div>
+    <div class="help-panel" id="stats-help-panel" aria-hidden="true">
+      <div class="help-panel-title">統計頁怎麼看</div>
+      <div class="help-steps">
+        <div class="help-step"><span class="help-step-num">1</span><span>切換日期，或用底部水平捲動條快速滑動</span></div>
+        <div class="help-step"><span class="help-step-num">2</span><span>點任一格，立即查看「有空 / 非空閒」名單</span></div>
+        <div class="help-step"><span class="help-step-num">3</span><span>用「個人檢視 / 篩選」比較特定成員</span></div>
+      </div>
+      <div class="help-panel-actions">
+        <button type="button" class="help-dismiss" id="stats-help-close">我知道了</button>
+      </div>
+    </div>
     <div class="view-controls">
       <label for="user-filter">個人檢視</label>
       <select id="user-filter">

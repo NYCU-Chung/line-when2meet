@@ -21,6 +21,7 @@ const STATUS_CSS = {
   4: "status-sleep",
   5: "status-home",
 };
+const STATS_HELP_SEEN_KEY = "w2m_stats_help_seen_v1";
 
 let statsData = null;
 let groupId = null;
@@ -106,6 +107,54 @@ function resolveGroupId() {
   return normalizeGroupId(typeof INITIAL_GROUP_ID === "string" ? INITIAL_GROUP_ID : "");
 }
 
+function initStatsHelpPanel() {
+  const panel = document.getElementById("stats-help-panel");
+  const toggle = document.getElementById("stats-help-toggle");
+  const closeBtn = document.getElementById("stats-help-close");
+  if (!panel || !toggle || !closeBtn) return;
+
+  const setOpen = (open) => {
+    panel.classList.toggle("show", open);
+    panel.setAttribute("aria-hidden", open ? "false" : "true");
+    toggle.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.textContent = open ? "收起操作教學" : "查看操作教學";
+  };
+
+  toggle.addEventListener("click", () => {
+    const open = !panel.classList.contains("show");
+    setOpen(open);
+    markHelpSeen(STATS_HELP_SEEN_KEY);
+  });
+
+  closeBtn.addEventListener("click", () => {
+    setOpen(false);
+    markHelpSeen(STATS_HELP_SEEN_KEY);
+  });
+
+  const seen = isHelpSeen(STATS_HELP_SEEN_KEY);
+  setOpen(!seen);
+  if (!seen) {
+    markHelpSeen(STATS_HELP_SEEN_KEY);
+  }
+}
+
+function isHelpSeen(key) {
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markHelpSeen(key) {
+  try {
+    window.localStorage.setItem(key, "1");
+  } catch {
+    // ignore storage errors
+  }
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   groupId = resolveGroupId();
 
@@ -131,6 +180,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initCarouselDrag();
   initDetailPanel();
   updateLegendHint();
+  initStatsHelpPanel();
   bindAvatarAutoLayout();
 });
 

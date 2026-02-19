@@ -22,6 +22,21 @@
   <header class="app-header">
     <h1>空閒時間填寫</h1>
     <div class="user-info">👤 <span id="user-name"></span></div>
+    <div class="help-row">
+      <button type="button" class="help-toggle" id="schedule-help-toggle" aria-expanded="false">查看操作教學</button>
+      <span class="help-inline-tip">支援拖曳一次選取多格</span>
+    </div>
+    <div class="help-panel" id="schedule-help-panel" aria-hidden="true">
+      <div class="help-panel-title">30 秒快速上手</div>
+      <div class="help-steps">
+        <div class="help-step"><span class="help-step-num">1</span><span>先點「筆刷」選擇狀態</span></div>
+        <div class="help-step"><span class="help-step-num">2</span><span>在課表格子上拖曳，一次塗多格</span></div>
+        <div class="help-step"><span class="help-step-num">3</span><span>單點格子可編輯備註，系統會自動儲存</span></div>
+      </div>
+      <div class="help-panel-actions">
+        <button type="button" class="help-dismiss" id="schedule-help-close">我知道了</button>
+      </div>
+    </div>
 
     <!-- 筆刷（拖曳一次後自動關閉） -->
     <div class="brushbar">
