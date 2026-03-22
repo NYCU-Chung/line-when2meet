@@ -1,7 +1,7 @@
 # Environment variables
 .env
 
-# Database
+# Database & runtime data
 data/
 *.db
 backups/
