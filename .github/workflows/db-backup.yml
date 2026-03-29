@@ -10,29 +10,28 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create backup
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          BACKUP_DIR: backups
+      - name: Set up SSH key
         run: |
-          if [ -z "${DATABASE_URL}" ]; then
-            echo "Missing GitHub secret: DATABASE_URL"
-            exit 1
-          fi
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCP_SSH_KEY }}" > ~/.ssh/gcp_linebot
+          chmod 600 ~/.ssh/gcp_linebot
+          ssh-keyscan -H 35.212.245.209 >> ~/.ssh/known_hosts
 
-          # Use PostgreSQL 17 client to match Railway server major version.
-          docker run --rm \
-            -e DATABASE_URL \
-            -e BACKUP_DIR=/workspace/backups \
-            -v "$PWD:/workspace" \
-            -w /workspace \
-            postgres:17 \
-            bash scripts/backup_db.sh
+      - name: Create backup via SSH
+        run: |
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          BACKUP_FILE="when2meet-postgres-${TIMESTAMP}.dump"
 
-          BACKUP_FILE="$(ls -1t backups/* | head -n 1)"
+          ssh -i ~/.ssh/gcp_linebot programchung@35.212.245.209 \
+            "docker exec line-when2meet-db-1 pg_dump -U when2meet -F c when2meet > /tmp/${BACKUP_FILE}"
+
+          scp -i ~/.ssh/gcp_linebot \
+            programchung@35.212.245.209:/tmp/${BACKUP_FILE} \
+            "${BACKUP_FILE}"
+
+          ssh -i ~/.ssh/gcp_linebot programchung@35.212.245.209 \
+            "rm /tmp/${BACKUP_FILE}"
+
           echo "BACKUP_FILE=${BACKUP_FILE}" >> "${GITHUB_ENV}"
 
       - name: Verify backup file
